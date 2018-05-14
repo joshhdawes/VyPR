@@ -1,0 +1,37 @@
+"""
+(C) Copyright 2018 CERN and University of Manchester.
+This software is distributed under the terms of the GNU General Public Licence version 3 (GPL Version 3), copied verbatim in the file "COPYING".
+In applying this licence, CERN does not waive the privileges and immunities granted to it by virtue of its status as an Intergovernmental Organization or submit itself to any jurisdiction.
+
+Author: Joshua Dawes - CERN, University of Manchester - joshua.dawes@cern.ch
+"""
+
+x = 3
+b = 60
+for i in range(0, 3):
+	a = 40 + i
+	for j in range(0, 5):
+		if j < 3:
+			z = 3
+		else:
+			z = 4
+	f(1.1)
+	print("end of iteration of loop")
+y = 3
+a = 50
+i = 5
+j = 5
+if a < b:
+	if i == j:
+		for n in range(3):
+			f(0.2)
+	c = 30
+elif a < b + 10:
+	d = 50
+elif a < b + 20:
+	f(3)
+	e = 70
+else:
+	g = 20
+	f(2)
+d = 30
