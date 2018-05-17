@@ -460,6 +460,9 @@ if __name__ == "__main__":
 						record_state_ast.lineno = incident_edge._instruction.lineno
 						record_state_ast.col_offset = incident_edge._instruction.col_offset
 
+						queue_ast.lineno = incident_edge._instruction.lineno
+						queue_ast.col_offset = incident_edge._instruction.col_offset
+
 						add_timing_point("constructed ast for state instrument")
 
 						index_in_block = parent_block.index(incident_edge._instruction)
