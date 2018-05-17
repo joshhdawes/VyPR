@@ -17,6 +17,7 @@ import json
 
 # import output functions
 from control_flow_graph.construction import *
+from verdict_reports import VerdictReport
 
 verbose = False
 verbose_monitor = False
@@ -57,30 +58,6 @@ def add_monitor_size_point(qd_index, list_index, size, sub_verdict, context):
 	monitor_sizes_lock.acquire()
 	monitor_sizes.append({"qd_index" : qd_index, "list_index" : list_index, "size" : size, "sub_verdict" : sub_verdict, "context": context, "timestamp" : datetime.datetime.now()})
 	monitor_sizes_lock.release()
-
-"""# a map from vertices in an scfg to the list of vertices reachable from that vertex
-reachability_map = {}
-vertex_to_edges_traversed = {}
-
-def construct_reachability_map(current_vertex, vertices_encountered=[], edges_traversed=[]):
-	reachability_map[current_vertex] = []
-	vertex_to_edges_traversed[current_vertex] = []
-	for edge in current_vertex.edges:
- 
-		if not(edge in vertex_to_edges_traversed[current_vertex]):
-
-			vertex_to_edges_traversed[current_vertex].append(edge)
-
-			reachability_map[current_vertex].append(edge._target_state)
-			reachability_map[current_vertex].append(edge)
-
-			for vertex in vertices_encountered:
-				reachability_map[vertex].append(edge._target_state)
-				reachability_map[vertex].append(edge)
-
-			construct_reachability_map(edge._target_state,
-				vertices_encountered+[current_vertex],
-				edges_traversed+[edge])"""
 
 def scfg_to_tree(root):
 	"""
@@ -277,64 +254,14 @@ if __name__ == "__main__":
 	static_qd_to_point_map = {}
 
 	# define a formula
-
-	# this is the bind variable for the QD
-	#q = StaticState('q', 'a')
-	# second bind variable
-	#t = StaticTransition('t', 'f', uses=q)
-	"""formula_structure = Forall(
-		StaticState('q', 'a')
-	).Forall(
-		StaticTransition('t', 'f', uses='q')
-	).Formula(
-		lambda q, t: (
-			If(
-				q('a')._in([0, 80])
-			).then(
-				t.duration()._in([0, 1])
-			)
-		)
-	)"""
 	formula_structure = import_property_definition(args.property)
 
 	print(formula_structure._formula_atoms)
 
 	print(formula_structure)
 
-	"""formula_structure = Forall(q)
-	atom1 = q('a')._in([0, 80])
-	atom2 = q._next_transition('f').duration()._in([0, 1])"""
-
-	# track changes to database
-	"""q = StaticState('q', 'database')
-	formula_structure = Forall(q)
-	atom1 = q('database')._in([1, 1])
-	atom2 = q._next_transition('database_operation').duration()._in([0, 1])
-	atom3 = q._next_transition('close_connection').duration()._in([0, 5])"""
-
-	"""q = StaticState('q', 'database')
-	t = StaticTransition('t', 'operation', uses=q)
-	formula_structure = Forall(q, t)
-	atom1 = q('database')._in([1, 1])
-	atom2 = t.duration()._in([0, 1])"""
-
-	"""q = StaticState('q', 'authenticated')
-	t = StaticTransition('t', 'query', uses=q)
-	formula_structure = Forall(q, t)
-	atom1 = q('authenticated')._in([1, 1])
-	atom2 = t.duration()._in([0, 1])"""
-
 	add_timing_point("set up formula")
 
-	"""print("composition sequence of atom %s is %s" % (atom1, derive_composition_sequence(atom1)))
-	print("composition sequence of atom %s is %s" % (atom2, derive_composition_sequence(atom2)))"""
-
-	#formula = If(atom1).then(formula_tree.land(atom2, atom3))
-	#formula = If(atom1).then(atom2)
-
-	# define the list of atoms, C(phi), for which data needs to be obtained
-	#atoms = [atom1, atom2, atom3]
-	#atoms = [atom1, atom2]
 	atoms = formula_structure._formula_atoms
 
 	# for each element in the static QD, compute the states/transitions
@@ -566,6 +493,8 @@ if __name__ == "__main__":
 		global static_qd_to_monitors
 		global bindings
 
+		global verdict_report
+
 		while not(can_stop):
 			# take top element from the queue
 			try:
@@ -592,14 +521,6 @@ if __name__ == "__main__":
 			observed_value = top_pair[4]# this may be redundant now
 			associated_atom = atoms[top_pair[5]]
 
-			"""if bind_variables_to_values.get(bind_variable_index) is None:
-				bind_variables_to_values[bind_variable_index] = [observed_value]
-			elif not(observed_value in bind_variables_to_values[associated_atom]):
-				bind_variables_to_values[associated_atom].append(observed_value)
-			else:
-				# this value has already been observed - no need to store it again
-				pass"""
-
 
 			# use the atom with the observed value and the object in the static cfg to decide
 			# on the value of the atom and update the corresponding monitor
@@ -617,16 +538,6 @@ if __name__ == "__main__":
 
 			# for now, instruments point to single qd bindings so no need to compute a set
 			# of valid binding indices
-
-			"""# find all static qd elements that map to a set containing this instrumentation point
-			valid_indices = []
-
-			for qd_index in static_qd_to_point_map.keys():
-				for bind_variable_index in static_qd_to_point_map[qd_index].keys():
-					if instrumentation_point in static_qd_to_point_map[qd_index][bind_variable_index][0]:
-						valid_indices.append(qd_index)
-
-			print("valid indices are ", valid_indices)"""
 
 			pprint(static_qd_to_point_map[static_qd_index][bind_variable_index])
 
@@ -686,6 +597,8 @@ if __name__ == "__main__":
 							print("TRUE OR FALSE VERDICT REACHED")
 							add_timing_point("verdict reached - monitor deleted")
 							#add_monitor_size_point(static_qd_index, 0, 0, sub_verdict, "new")
+
+							verdict_report.add_verdict(static_qd_index, sub_verdict)
 						else:
 							print("NO VERDICT REACHED")
 							add_timing_point("processed observed value '%s' for atom %s" % (observed_value, associated_atom))
@@ -766,6 +679,8 @@ if __name__ == "__main__":
 								print("TRUE OR FALSE VERDICT REACHED")
 								add_timing_point("verdict reached - monitor deleted")
 								#add_monitor_size_point(static_qd_index, 0, 0, sub_verdict, "new")
+
+								verdict_report.add_verdict(static_qd_index, sub_verdict)
 							else:
 								print("NO VERDICT REACHED")
 								add_timing_point("processed observed value '%s' for atom %s" % (observed_value, associated_atom))
@@ -844,6 +759,8 @@ if __name__ == "__main__":
 								add_timing_point("verdict reached - monitor deleted")
 								if check_monitor_size:
 									add_monitor_size_point(static_qd_index, n, 0, sub_verdict, "existing")
+
+								verdict_report.add_verdict(static_qd_index, sub_verdict)
 							else:
 								print("NO VERDICT REACHED")
 								add_timing_point("processed observed value '%s' for atom %s" % (observed_value, associated_atom))
@@ -912,6 +829,9 @@ if __name__ == "__main__":
 
 	add_timing_point("starting execution")
 
+	# set up the verdict report
+	verdict_report = VerdictReport()
+
 	program_thread.start()
 	consumer_thread.start()
 
@@ -943,4 +863,37 @@ if __name__ == "__main__":
 
 	print("Program finished, and timing/monitor size data inserted into '%s'." % db)
 
-	pprint(monitor_sizes)
+	#pprint(monitor_sizes)
+
+	# output verdict report
+
+	print("-"*50)
+
+	print("VERDICT REPORT")
+
+	print("-"*50)
+	
+	report_map = verdict_report.get_final_verdict_report()
+
+	for bind_space_index in report_map.keys():
+
+		print("Binding")
+		binding = bindings[bind_space_index]
+
+		print("[")
+
+		# for each element of the binding, print the appropriate representation
+		for bind_var in binding:
+
+			if type(bind_var) is CFGVertex:
+				print("state change resulting from assignment to %s : line %i" %\
+					(bind_var._previous_edge._instruction.targets[0].id, bind_var._previous_edge._instruction.lineno))
+			elif type(bind_var) is CFGEdge:
+				print("edge corresponding to call to %s : line %i" %\
+					(bind_var._instruction.value.func.id, bind_var._instruction.lineno))
+
+		print("]")
+
+		print("gave verdicts %s" % (", ".join(map(str, report_map[bind_space_index]))))
+
+		print("")

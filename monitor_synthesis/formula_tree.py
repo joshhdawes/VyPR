@@ -678,14 +678,6 @@ class Checker(object):
 								return False
 			return sub_verdict
 		elif type(formula) is LogicalNot:
-			"""if formula_is_atom(formula.operand):
-				if type(formula.operand) is str and formula.operand == symbol:
-					return False
-				elif type(formula.operand) is LogicalNot and formula.operand.operand == symbol:
-					return True
-			else:
-				sub_verdict = self.check(formula.operand, symbol, level+1)
-			return sub_verdict"""
 			if formula_is_derived_from_atom(formula.operand) and formula.operand == symbol:
 				return False
 			elif type(formula.operand) is LogicalNot and formula.operand.operand == symbol:
@@ -694,51 +686,3 @@ class Checker(object):
 def new_monitor(formula, optimised=True):
 	print(formula)
 	return Checker(formula, optimised)
-
-if __name__ == "__main__":
-
-	#input_word = ['a', lnot('c'), lnot('b'), 'd', 'e']
-	#input_word = ['a', 'b', 'c']
-	#input_word = [lnot('a'), lnot('b'), lnot('c')]
-	input_word = [lnot('a'), 'c', lnot('b')]
-
-	print("STANDARD TRAVERSAL")
-
-	# test with standard recursive traversal
-	start = datetime.datetime.now()
-	#formula = lor(land('a', 'b'), 'c', land('d', lor('e', 'a')))
-	formula = lor(lnot(land('a', 'b')), 'c', land('c', lnot('b')))
-
-	checker = Checker(formula)
-	for symbol in input_word:
-		print("Sending %s" % symbol)
-		result = checker.check(formula, symbol)
-		formula.verdict = result
-		print("-"*20)
-		print("formula state is %s" % formula)
-		print("Intermediate result: %s" % result)
-		print("-"*20)
-	end = datetime.datetime.now()
-
-	print("result was %s" % result)
-
-	print("time: %s" % (end-start))
-
-	print("OPTIMISED TRAVERSAL")
-
-	# test with optimised traversal
-	start = datetime.datetime.now()
-	formula = lor(lnot(land('a', 'b')), 'c', land('c', lnot('b')))
-	checker = Checker(formula)
-	for symbol in input_word:
-		print("Sending %s" % symbol)
-		result = checker.check_optimised(symbol)
-		print("-"*20)
-		print("formula state is %s" % formula)
-		print("Intermediate result: %s" % result)
-		print("-"*20)
-	end = datetime.datetime.now()
-
-	print("result was %s" % result)
-
-	print("time: %s" % (end-start))

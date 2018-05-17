@@ -80,9 +80,6 @@ class CFGEdge(object):
 		if not(type(self._instruction) is str):
 			state._previous_edge = self
 
-	"""def __repr__(self):
-		return "(%s, %s)" % (self._condition, self._target_state)"""
-
 class CFG(object):
 	"""
 	This class represents a symbolic control flow graph.
