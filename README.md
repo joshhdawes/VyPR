@@ -8,6 +8,16 @@ In applying this licence, CERN does not waive the privileges and immunities gran
 
 Author: Joshua Dawes - CERN, University of Manchester
 
+## Setup
+
+To use VyPR, setup a virtual environment for Python in the directory in which you will run the tool.
+
+Virtual environments are a way to sandbox code, and prevent installing libraries that a single project needs for the entire system.
+
+This can be done by first installing `virtualenv` with `pip`, then running `virtualenv venv`.  This will setup a directory called `venv` in that subdirectory with all necessary Python-related libraries.  You can then run `source ./venv/bin/activate` to initialise the virtual environment.
+
+Once the virtual environment is initialised, run `pip install -r requirements.txt` from inside the tool directory to install the Python dependencies *inside the virtual environment* (if you do this outside of the virtual environment, you will install the dependencies globally).
+
 ## Verification
 
 Running `python verification.py -h` will output the following:
@@ -90,12 +100,17 @@ Formula(
 
 defines a formula, over which the preceding quantification sequence (defined above) is applied.  In this case, the property says that "If `a` is changed to be in the interval [0, 80], then every time the function `f` is called in the future, it should return in time in the interval [0, 1]".
 
-## Setup
+## Verdict Reports
 
-To use VyPR, setup a virtual environment for Python in the directory in which you will run the tool.
+Given a property, the purpose of verifying a property with respect to it is to see both where the property holds *and* where it doesn't.  VyPR currently gives verdict reports - for group of statements in the program (a *group* here is a *static binding*), the set of verdicts associated with that group at runtime is listed at the end of the program run.
 
-Virtual environments are a way to sandbox code, and prevent installing libraries that a single project needs for the entire system.
+```
+Binding
+[
+state change resulting from assignment to a : line 9
+edge corresponding to call to f : line 12
+]
+gave verdicts True, True, True
+```
 
-This can be done by first installing `virtualenv` with `pip`, then running `virtualenv venv`.  This will setup a directory called `venv` in that subdirectory with all necessary Python-related libraries.  You can then run `source ./venv/bin/activate` to initialise the virtual environment.
-
-Once the virtual environment is initialised, run `pip install -r requirements.txt` from inside the tool directory to install the Python dependencies *inside the virtual environment* (if you do this outside of the virtual environment, you will install the dependencies globally).
+This output says that a binding consisting of two lines, 9 and 12, results in three instances of the property above being checked; they all evaluate to true.
