@@ -166,6 +166,7 @@ if __name__ == "__main__":
 	parser.add_argument('--db', type=str, required=True, help='The database to write the log to - we use this for performance analysis of the monitoring.')
 	parser.add_argument('--property', type=str, required=True, help='The file in which the property definition is found for verification.')
 	parser.add_argument('--check-monitor', action='store_true', help='If supplied, the monitor size will be tracked.')
+	parser.add_argument('--generate-vis-data', action='store_true', help='If supplied, data will be generated that can be used by the visualisation tool.')
 
 	args = parser.parse_args()
 	optimised_monitor = args.optimised_monitor
@@ -816,6 +817,52 @@ if __name__ == "__main__":
 			print("CONSUMPTION DONE")
 
 			print("="*100)
+
+	# now, if the visualiser option has been given, output graphs for each stage of instrumentation
+	if args.generate_vis_data:
+		# output a graph for each binding
+		for n in range(len(bindings)):
+			print("binding", bindings[n])
+			implicit_colourings = []
+			for bind_variable_index in static_qd_to_point_map[n].keys():
+				for (atom_index, point_atom_pair) in enumerate(static_qd_to_point_map[n][bind_variable_index]):
+					points = point_atom_pair[0]
+					atom = point_atom_pair[1]
+					implicit_colourings += points
+
+			print("implicit", implicit_colourings)
+
+			output_file = args.graph[0].replace(".gv", "") + ("-%i" % n) + ".gv"
+			graph = Digraph()
+			graph.attr("graph", splines="true", fontsize="10")
+			shape = "circle"
+			for vertex in new_scfg.vertices:
+
+				if vertex in bindings[n]:
+					colour = "red"
+				elif vertex in implicit_colourings:
+					colour = "blue"
+				else:
+					colour = "white"
+
+				graph.node(str(id(vertex)), vertex._name_changed, shape=shape, style="filled", fillcolor=colour)
+
+				for edge in vertex.edges:
+
+					if edge in bindings[n]:
+						stroke = "red"
+					elif edge in implicit_colourings:
+						stroke = "blue"
+					else:
+						stroke = None
+
+					graph.edge(
+						str(id(vertex)),
+						str(id(edge._target_state)),
+						"%s : %s" % (str(edge._condition), instruction_to_string(edge._instruction)),
+						color=stroke
+					)
+			graph.render(output_file)
 
 	# setup the consumption queue for the monitor to read from
 	queue = Queue.Queue()
