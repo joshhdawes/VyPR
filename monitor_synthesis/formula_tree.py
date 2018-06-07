@@ -407,6 +407,7 @@ class Checker(object):
 				return self.get_unresolved_atoms(formula.operand)
 	
 	def construct_atom_formula_occurrence_map(self, formula):
+		
 		"""
 		Starting from the top level formula, recurse down.
 		Whenever an operand is an atom (positive or negative),

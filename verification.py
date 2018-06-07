@@ -19,6 +19,8 @@ import json
 from control_flow_graph.construction import *
 from verdict_reports import VerdictReport
 
+monitor_time_series = []
+
 verbose = False
 verbose_monitor = False
 optimised_monitor = False
@@ -818,51 +820,20 @@ if __name__ == "__main__":
 
 			print("="*100)
 
-	# now, if the visualiser option has been given, output graphs for each stage of instrumentation
-	if args.generate_vis_data:
-		# output a graph for each binding
-		for n in range(len(bindings)):
-			print("binding", bindings[n])
-			implicit_colourings = []
-			for bind_variable_index in static_qd_to_point_map[n].keys():
-				for (atom_index, point_atom_pair) in enumerate(static_qd_to_point_map[n][bind_variable_index]):
-					points = point_atom_pair[0]
-					atom = point_atom_pair[1]
-					implicit_colourings += points
-
-			print("implicit", implicit_colourings)
-
-			output_file = args.graph[0].replace(".gv", "") + ("-%i" % n) + ".gv"
-			graph = Digraph()
-			graph.attr("graph", splines="true", fontsize="10")
-			shape = "circle"
-			for vertex in new_scfg.vertices:
-
-				if vertex in bindings[n]:
-					colour = "red"
-				elif vertex in implicit_colourings:
-					colour = "blue"
+			if args.generate_vis_data:
+				# update the time series
+				if type(instrumentation_point) is CFGVertex:
+					line_number = instrumentation_point._previous_edge._instruction.lineno
 				else:
-					colour = "white"
+					line_number = instrumentation_point._instruction.lineno
 
-				graph.node(str(id(vertex)), vertex._name_changed, shape=shape, style="filled", fillcolor=colour)
+				all_monitor_strings = []
+				for monitor_list in static_qd_to_monitors.values():
+					if monitor_list:
+						all_monitor_strings += map(str, monitor_list)
+				map_dump = json.dumps(all_monitor_strings)
 
-				for edge in vertex.edges:
-
-					if edge in bindings[n]:
-						stroke = "red"
-					elif edge in implicit_colourings:
-						stroke = "blue"
-					else:
-						stroke = None
-
-					graph.edge(
-						str(id(vertex)),
-						str(id(edge._target_state)),
-						"%s : %s" % (str(edge._condition), instruction_to_string(edge._instruction)),
-						color=stroke
-					)
-			graph.render(output_file)
+				monitor_time_series.append((datetime.datetime.now(), line_number, map_dump))
 
 	# setup the consumption queue for the monitor to read from
 	queue = Queue.Queue()
@@ -947,3 +918,60 @@ if __name__ == "__main__":
 		print("gave verdicts %s" % (", ".join(map(str, report_map[bind_space_index]))))
 
 		print("")
+
+
+	# now, if the visualiser option has been given, output graphs for each stage of instrumentation
+	if args.generate_vis_data:
+		# output a graph for each binding
+		for n in range(len(bindings)):
+			print("binding", bindings[n])
+			implicit_colourings = []
+			for bind_variable_index in static_qd_to_point_map[n].keys():
+				for (atom_index, point_atom_pair) in enumerate(static_qd_to_point_map[n][bind_variable_index]):
+					points = point_atom_pair[0]
+					atom = point_atom_pair[1]
+					implicit_colourings += points
+
+			print("implicit", implicit_colourings)
+
+			output_file = args.graph[0].replace(".gv", "") + ("-%i" % n) + ".gv"
+			graph = Digraph()
+			graph.attr("graph", splines="true", fontsize="10")
+			shape = "circle"
+			for vertex in new_scfg.vertices:
+
+				if vertex in bindings[n]:
+					colour = "red"
+				elif vertex in implicit_colourings:
+					colour = "blue"
+				else:
+					colour = "white"
+
+				graph.node(str(id(vertex)), vertex._name_changed, shape=shape, style="filled", fillcolor=colour)
+
+				for edge in vertex.edges:
+
+					if edge in bindings[n]:
+						stroke = "red"
+					elif edge in implicit_colourings:
+						stroke = "blue"
+					else:
+						stroke = None
+
+					graph.edge(
+						str(id(vertex)),
+						str(id(edge._target_state)),
+						"%s : %s" % (str(edge._condition), instruction_to_string(edge._instruction)),
+						color=stroke
+					)
+			graph.render(output_file)
+
+
+		# write time series data
+		ts_db = "run_descriptions.db"
+		ts_con = sqlite3.connect(ts_db)
+		ts_cursor = ts_con.cursor()
+		for frame in monitor_time_series:
+			ts_cursor.execute("insert into frame (frame_time, line_number, monitoring_map_dump) values (?, ?, ?)", frame)
+		ts_con.commit()
+		ts_con.close()
