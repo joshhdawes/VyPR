@@ -36,6 +36,10 @@ static_qd_to_monitors = {}
 # this likely to be memory intensive - I want to find another way to monitor
 static_bindings_to_monitor_states = {}
 
+# a map from static bindings to instrumentation points that were the most recent
+# to trigger monitor instantiation.
+static_bindings_to_trigger_points = {}
+
 # binding space - statically computed
 bindings = []
 
@@ -223,7 +227,7 @@ if __name__ == "__main__":
 	ast_obj = ast.parse(code)
 
 	# a function used in the imported code
-	def f(a): time.sleep(a)
+	def f(a): print("***************f is executing with input %f*******************" % a);time.sleep(a);
 	def database_operation(db): time.sleep(0.5)
 	def close_connection(db): time.sleep(0.5)
 	def operation(t): time.sleep(t)
@@ -405,6 +409,8 @@ if __name__ == "__main__":
 			else:
 				static_qd_to_point_map[m][position_in_quant_sequence] = [(instrumentation_points, atom)]
 
+			static_qd_to_point_map[m][position_in_quant_sequence].append(([value_from_binding], "trigger"))
+
 		"""# store the map from the current static qd index,
 		# to all of the points that must be instrumented
 		static_qd_to_point_map[m] = element_instrumentation_points"""
@@ -419,95 +425,130 @@ if __name__ == "__main__":
 				points = point_atom_pair[0]
 				atom = point_atom_pair[1]
 
-				for (n, point) in enumerate(points):
-					if type(atom) is formula_tree.TransitionDurationInInterval:
-						print("instrumenting call to measure duration")
-						print("instrumenting instrumentation point %s on line %i" % (point, point._instruction.lineno))
+				if atom == "trigger":
+					# we must instrument this as a trigger point
+					print("instrumenting a trigger point")
+					point = points[0]
+
+					# this instrument only needs to reset the minimality flag for the correct partition set
+					# the binding space index combined with the bind variable index are enough for that
+					instrument = "queue.put((%i, %i))" % (m, bind_variable_index)
+
+					instrument_ast = ast.parse(instrument).body[0]
+					if type(point) is CFGVertex:
+						instruction = point._previous_edge._instruction
+					else:
+						instruction = point._instruction
+
+					lineno = instruction.lineno
+					col_offset = instruction.col_offset
+
+					index_in_block = instruction._parent_body.index(instruction)
+
+					instruction._parent_body.insert(index_in_block+1, instrument_ast)
+
+				else:
+
+					for (n, point) in enumerate(points):
+						if type(atom) is formula_tree.TransitionDurationInInterval:
+							print("instrumenting call to measure duration")
+							print("instrumenting instrumentation point %s on line %i" % (point, point._instruction.lineno))
 
 
-						timer_start_statement = "__timer_s = datetime.datetime.now()"
-						timer_end_statement = "__timer_e = datetime.datetime.now()"
-						# we put a pair (index in static qd, index in instrumentation points)
-						# this determines the point in the static cfg that will be executed
-						time_difference_statement = "__duration = __timer_e - __timer_s; queue.put((%i, %i, %i, %i, __duration, %i, %i));" %\
-							(m, bind_variable_index, atom_index, n, atoms.index(atom), point._instruction.lineno)
+							timer_start_statement = "__timer_s = datetime.datetime.now()"
+							timer_end_statement = "__timer_e = datetime.datetime.now()"
+							# we put a pair (index in static qd, index in instrumentation points)
+							# this determines the point in the static cfg that will be executed
+							time_difference_statement = ("__duration = __timer_e - __timer_s; queue.put((%i, %i, %i, %i, __duration, %i, %i));" +\
+														"print('instrument firing!', %i, %i, list(queue.queue));") %\
+								(m, bind_variable_index, atom_index, n, atoms.index(atom), point._instruction.lineno, m, bind_variable_index)
 
-						# timing instruction - helps with performance analysis
-						timing_point_statement = "add_timing_point('instrumented instruction on line %i')" % point._instruction.lineno
+							# timing instruction - helps with performance analysis
+							timing_point_statement = "add_timing_point('instrumented instruction on line %i')" % point._instruction.lineno
 
-						start_ast = ast.parse(timer_start_statement).body[0]
-						end_ast = ast.parse(timer_end_statement).body[0]
-						difference_ast = ast.parse(time_difference_statement).body[0]
-						queue_ast = ast.parse(time_difference_statement).body[1]
-						timing_point_ast = ast.parse(timing_point_statement).body[0]
+							start_ast = ast.parse(timer_start_statement).body[0]
+							end_ast = ast.parse(timer_end_statement).body[0]
+							difference_ast = ast.parse(time_difference_statement).body[0]
+							queue_ast = ast.parse(time_difference_statement).body[1]
+							print_ast = ast.parse(time_difference_statement).body[2]
+							timing_point_ast = ast.parse(timing_point_statement).body[0]
 
-						add_timing_point("constructed asts for transition duration instrument")
+							add_timing_point("constructed asts for transition duration instrument")
 
-						start_ast.lineno = point._instruction.lineno
-						start_ast.col_offset = point._instruction.col_offset
-						end_ast.lineno = point._instruction.lineno
-						end_ast.col_offset = point._instruction.col_offset
-						difference_ast.lineno = point._instruction.lineno
-						difference_ast.col_offset = point._instruction.col_offset
-						queue_ast.lineno = point._instruction.lineno
-						queue_ast.col_offset = point._instruction.col_offset
-						timing_point_ast.lineno = point._instruction.lineno
-						timing_point_ast.col_offset = point._instruction.col_offset
+							start_ast.lineno = point._instruction.lineno
+							start_ast.col_offset = point._instruction.col_offset
+							end_ast.lineno = point._instruction.lineno
+							end_ast.col_offset = point._instruction.col_offset
+							difference_ast.lineno = point._instruction.lineno
+							difference_ast.col_offset = point._instruction.col_offset
 
-						#ast.increment_lineno(point._instruction, n=2)
+							print_ast.lineno = point._instruction.lineno
+							print_ast.col_offset = point._instruction.col_offset
 
-						index_in_block = point._instruction._parent_body.index(point._instruction)
+							queue_ast.lineno = point._instruction.lineno
+							queue_ast.col_offset = point._instruction.col_offset
+							timing_point_ast.lineno = point._instruction.lineno
+							timing_point_ast.col_offset = point._instruction.col_offset
 
-						point._instruction._parent_body.insert(index_in_block, start_ast)
-						point._instruction._parent_body.insert(index_in_block+2, end_ast)
-						point._instruction._parent_body.insert(index_in_block+3, difference_ast)
-						point._instruction._parent_body.insert(index_in_block+4, timing_point_ast)
-						point._instruction._parent_body.insert(index_in_block+5, queue_ast)
+							#ast.increment_lineno(point._instruction, n=2)
 
-						add_timing_point("modified program with transition duration instrument")
+							index_in_block = point._instruction._parent_body.index(point._instruction)
 
-					elif type(atom) is formula_tree.StateValueInInterval:
-						print("instrumenting state changes")
-						#print(point._previous_edge._instruction)
-						#print("instrumenting instrumentation point %s on line %i" % (point, point._previous_edge._instruction.lineno))
+							# instruments are added in reverse order
+							point._instruction._parent_body.insert(index_in_block+1, timing_point_ast)
+							point._instruction._parent_body.insert(index_in_block+1, print_ast)
+							point._instruction._parent_body.insert(index_in_block+1, queue_ast)
+							point._instruction._parent_body.insert(index_in_block+1, difference_ast)
+							point._instruction._parent_body.insert(index_in_block+1, end_ast)
+							point._instruction._parent_body.insert(index_in_block, start_ast)
 
-						# we are instrumenting a state, so store the value used in that state
-						# in a new variable by accessing the existing variable
-						# we place code in the edge leading to this vertex, since
-						# that is the edge that contains the code that computes the state
-						# this vertex models.
+							add_timing_point("modified program with transition duration instrument")
 
-						incident_edge = point._previous_edge
-						parent_block = incident_edge._instruction._parent_body
+							print("PARENT BODY")
+							print(point._instruction._parent_body)
 
-						# need to adjust this to record the entire state! <- possibly infeasible
-						record_state = "record_state_%s = %s; queue.put((%i, %i, %i, %i, {'%s' : record_state_%s}, %i, %i));" %\
-							(atom._name, atom._name, m, bind_variable_index, atom_index, n, atom._name, atom._name, atoms.index(atom), incident_edge._instruction.lineno)
+						elif type(atom) is formula_tree.StateValueInInterval:
+							print("instrumenting state changes")
+							#print(point._previous_edge._instruction)
+							#print("instrumenting instrumentation point %s on line %i" % (point, point._previous_edge._instruction.lineno))
 
-						# timing instruction - helps with performance analysis
-						timing_point_statement = "add_timing_point('instrumented state change on line %i')" % incident_edge._instruction.lineno
+							# we are instrumenting a state, so store the value used in that state
+							# in a new variable by accessing the existing variable
+							# we place code in the edge leading to this vertex, since
+							# that is the edge that contains the code that computes the state
+							# this vertex models.
 
-						record_state_ast = ast.parse(record_state).body[0]
-						queue_ast = ast.parse(record_state).body[1]
-						timing_point_ast = ast.parse(timing_point_statement).body[0]
+							incident_edge = point._previous_edge
+							parent_block = incident_edge._instruction._parent_body
 
-						timing_point_ast.lineno = incident_edge._instruction.lineno
-						timing_point_ast.col_offset = incident_edge._instruction.col_offset
+							# need to adjust this to record the entire state! <- possibly infeasible
+							record_state = "record_state_%s = %s; queue.put((%i, %i, %i, %i, {'%s' : record_state_%s}, %i, %i));" %\
+								(atom._name, atom._name, m, bind_variable_index, atom_index, n, atom._name, atom._name, atoms.index(atom), incident_edge._instruction.lineno)
 
-						record_state_ast.lineno = incident_edge._instruction.lineno
-						record_state_ast.col_offset = incident_edge._instruction.col_offset
+							# timing instruction - helps with performance analysis
+							timing_point_statement = "add_timing_point('instrumented state change on line %i')" % incident_edge._instruction.lineno
 
-						queue_ast.lineno = incident_edge._instruction.lineno
-						queue_ast.col_offset = incident_edge._instruction.col_offset
+							record_state_ast = ast.parse(record_state).body[0]
+							queue_ast = ast.parse(record_state).body[1]
+							timing_point_ast = ast.parse(timing_point_statement).body[0]
 
-						add_timing_point("constructed ast for state instrument")
+							timing_point_ast.lineno = incident_edge._instruction.lineno
+							timing_point_ast.col_offset = incident_edge._instruction.col_offset
 
-						index_in_block = parent_block.index(incident_edge._instruction)
-						parent_block.insert(index_in_block+1, record_state_ast)
-						parent_block.insert(index_in_block+2, timing_point_ast)
-						parent_block.insert(index_in_block+3, queue_ast)
+							record_state_ast.lineno = incident_edge._instruction.lineno
+							record_state_ast.col_offset = incident_edge._instruction.col_offset
 
-						add_timing_point("modified program with state instrument")
+							queue_ast.lineno = incident_edge._instruction.lineno
+							queue_ast.col_offset = incident_edge._instruction.col_offset
+
+							add_timing_point("constructed ast for state instrument")
+
+							index_in_block = parent_block.index(incident_edge._instruction)
+							parent_block.insert(index_in_block+1, record_state_ast)
+							parent_block.insert(index_in_block+2, timing_point_ast)
+							parent_block.insert(index_in_block+3, queue_ast)
+
+							add_timing_point("modified program with state instrument")
 
 	def program_thread_f(new_code_obj):
 		global can_stop
@@ -535,7 +576,7 @@ if __name__ == "__main__":
 
 		global verdict_report
 
-		while not(can_stop):
+		while not(can_stop) or (can_stop and not(queue.empty())):
 			# take top element from the queue
 			try:
 				top_pair = queue.get(timeout=1)
@@ -546,6 +587,7 @@ if __name__ == "__main__":
 			print("="*100)
 
 			print("CONSUMING ", top_pair)
+			print("queue is now %s" % str(queue.queue))
 
 			add_timing_point("beginning consumption of tuple %s" % str(top_pair))
 
@@ -554,8 +596,25 @@ if __name__ == "__main__":
 			# in the set of instrumentation points required for that member
 			# of the static qd
 
-			static_qd_index = top_pair[0]
-			bind_variable_index = top_pair[1]
+			if len(top_pair) == 2:
+				# we've received a trigger instrument
+				static_qd_index = top_pair[0]
+				bind_variable_index = top_pair[1]
+
+				if not(static_bindings_to_trigger_points.get(static_qd_index)):
+					static_bindings_to_trigger_points[static_qd_index] = {}
+
+				# reset the trigger
+				if static_bindings_to_trigger_points[static_qd_index].get(bind_variable_index):
+					static_bindings_to_trigger_points[static_qd_index][bind_variable_index] = None
+
+				print("Set partition set trigger for static qd %i and bind variable index %i to None" % (static_qd_index, bind_variable_index))
+
+				# continue onto the next iteration of the consumption loop
+				# trigger instrumentation points don't contribute to the monitor state
+				continue
+
+			# static qd index and bind variable index are already set
 			atom_index = top_pair[2]
 			instrumentation_set_index = top_pair[3]
 			observed_value = top_pair[4]# this may be redundant now
@@ -597,7 +656,27 @@ if __name__ == "__main__":
 			# decide what instrumentation_point can trigger (monitor update, new monitor, or nothing at all)
 			# for now the criteria is whether it is the first element in the list
 			# this is a temporarily primitive implementation of the partial order-based condition
-			if relevant_instrumentation_points[0] == instrumentation_point:
+
+			# decide if the instrumentation point is branch minimal
+			# we need to get the trigger point for the relevant partition
+			if static_bindings_to_trigger_points.get(static_qd_index):
+				if static_bindings_to_trigger_points.get(static_qd_index).get(bind_variable_index):
+					# the trigger point is not None, so branch minimality is not attained
+					branch_minimal = False
+				else:
+					# the trigger is None, so branch minimality is attained - set the trigger point to the
+					# current instrumentation point to remove branch minimality
+					branch_minimal = True
+					static_bindings_to_trigger_points[static_qd_index][bind_variable_index] = instrumentation_point
+			else:
+				# no monitors exist for this qd - branch minimality is attained
+				# I don't think it's possible to get to this branch, actually...
+				branch_minimal = True
+				static_bindings_to_trigger_points[static_qd_index] = {}
+				static_bindings_to_trigger_points[static_qd_index][bind_variable_index] = instrumentation_point
+
+			#if relevant_instrumentation_points[0] == instrumentation_point:
+			if branch_minimal:
 				print("USING STATIC QD INDEX %i" % static_qd_index)
 				# the instrumented point is the first in the list for this point in the qd
 				# we now check for existing monitors associated with this instrumentation point
