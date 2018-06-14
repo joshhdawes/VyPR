@@ -158,6 +158,40 @@ def import_property_definition(file_name):
 	exec(code)
 	return formula_structure
 
+steps = 0
+
+def output_graph_with_highlight(thing_to_highlight):
+	global args
+	global steps
+	output_file = "%s-run-%i.gv" % (args.graph[0].replace(".gv", ""), steps)
+	graph = Digraph()
+	graph.attr("graph", splines="true", fontsize="10")
+	shape = "circle"
+	for vertex in new_scfg.vertices:
+
+		if vertex == thing_to_highlight:
+			colour = "red"
+		else:
+			colour = "white"
+
+		graph.node(str(id(vertex)), vertex._name_changed, shape=shape, style="filled", fillcolor=colour)
+
+		for edge in vertex.edges:
+			if edge == thing_to_highlight:
+				stroke = "red"
+			else:
+				stroke = None
+
+			graph.edge(
+				str(id(vertex)),
+				str(id(edge._target_state)),
+				"%s : %s" % (str(edge._condition), instruction_to_string(edge._instruction)),
+				color=stroke
+			)
+	graph.render(output_file)
+	# increment the number of steps
+	steps += 1
+
 if __name__ == "__main__":
 
 	parser = argparse.ArgumentParser(description='Read in a sample program, instrument it for a property, and run it with monitoring.')
@@ -539,6 +573,11 @@ if __name__ == "__main__":
 
 			instrumentation_point = instrumentation_set[0][instrumentation_set_index]
 			instrumentation_atom = instrumentation_set[1]
+
+			# if we have to generate visulisation data,
+			# output a graph with the instrumentation point highlighted
+			if args.generate_vis_data:
+				output_graph_with_highlight(instrumentation_point)
 
 			print(instrumentation_point, static_qd_index)
 
