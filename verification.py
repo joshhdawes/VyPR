@@ -848,6 +848,8 @@ if __name__ == "__main__":
 							add_timing_point("verdict reached - monitor deleted")
 							if check_monitor_size:
 								add_monitor_size_point(static_qd_index, len(static_qd_to_monitors[static_qd_index])-1, 0, sub_verdict, "new")
+
+							verdict_report.add_verdict(static_qd_index, sub_verdict)
 						else:
 							print("NO VERDICT REACHED")
 							add_timing_point("processed observed value '%s' for atom %s" % (observed_value, associated_atom))
@@ -925,6 +927,8 @@ if __name__ == "__main__":
 							add_timing_point("verdict reached - monitor deleted")
 							if check_monitor_size:
 								add_monitor_size_point(static_qd_index, n, 0, sub_verdict, "existing")
+
+							verdict_report.add_verdict(static_qd_index, sub_verdict)
 						else:
 							print("NO VERDICT REACHED")
 							add_timing_point("processed observed value '%s' for atom %s" % (observed_value, associated_atom))
