@@ -614,7 +614,8 @@ if __name__ == "__main__":
 				# trigger instrumentation points don't contribute to the monitor state
 				continue
 
-			# static qd index and bind variable index are already set
+			static_qd_index = top_pair[0]
+			bind_variable_index = top_pair[1]
 			atom_index = top_pair[2]
 			instrumentation_set_index = top_pair[3]
 			observed_value = top_pair[4]# this may be redundant now
