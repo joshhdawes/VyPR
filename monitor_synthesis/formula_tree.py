@@ -69,6 +69,90 @@ class StateValueInInterval(Atom):
 		else:
 			return False
 
+	def check(self, value):
+		"""
+		Mandatory check method used by formula trees to compute truth values.
+		"""
+		return self._interval[0] <= value[self._name] <= self._interval[1]
+
+class StateValueInOpenInterval(Atom):
+	"""
+	This class models the atom (s(x) in I), where I is open.
+	We model openness by strict inequality checks in the check method.
+	"""
+
+	def __init__(self, state, name, interval):
+		self._state = state
+		self._name = name
+		self._interval = interval
+		self.verdict = None
+
+	def __repr__(self):
+		return "%s(%s) in %s" % (self._state, self._name, self._interval)
+
+	def __eq__(self, other_atom):
+		if type(other_atom) is StateValueInInterval:
+			return (self._state == other_atom._state and self._name == other_atom._name\
+				and self._interval == other_atom._interval)
+		else:
+			return False
+
+	def check(self, value):
+		"""
+		Mandatory check method used by formula trees to compute truth values.
+		"""
+		return self._interval[0] < value[self._name] < self._interval[1]
+
+class StateValueEqualTo(Atom):
+	"""
+	This class models the atom (s(x) = X).
+	"""
+
+	def __init__(self, state, name, value):
+		self._state = state
+		self._name = name
+		self._value = value
+		self.verdict = None
+
+	def __repr__(self):
+		return "%s(%s) = %s" % (self._state, self._name, self._value)
+
+	def __eq__(self, other_atom):
+		if type(other_atom) is StateValueEqualTo:
+			return (self._state == other_atom._state and self._name == other_atom._name\
+				and self._value == other_atom._value)
+		else:
+			return False
+
+	def check(self, value):
+		return self._value == value[self._name]
+
+class StateValueLengthInInterval(Atom):
+	"""
+	This class models the atom (len(s(x)) in I).
+	"""
+
+	def __init__(self, state, name, interval):
+		self._state = state
+		self._name = name
+		self._interval = interval
+
+	def __repr__(self):
+		return "len(%s(%s)) in %s" % (self._state, self._name, self._interval)
+
+	def __eq__(self, other_atom):
+		if type(other_atom) is StateValueLengthInInterval:
+			return (self._state == other_atom._state and self._name == other_atom._name\
+				and self._interval == other_atom._interval)
+		else:
+			return False
+
+	def check(self, value):
+		"""
+		Mandatory check method used by formula trees to compute truth values.
+		"""
+		return self._interval[0] <= len(value[self._name]) <= self._interval[1]
+
 class TransitionDurationInInterval(Atom):
 	"""
 	This class models the atom (d(delta t) in I).
@@ -87,6 +171,9 @@ class TransitionDurationInInterval(Atom):
 			return (self._transition == other_atom._transition and self._interval == other_atom._interval)
 		else:
 			return False
+
+	def check(self, duration):
+		return self._interval[0] <= duration <= self._interval[1]
 
 """
 Classes for propositional logical connectives.
@@ -442,24 +529,31 @@ class Checker(object):
 		print("PROCESSING ATOM %s" % atom)
 		if type(atom) is StateValueInInterval:
 			print("processing binding %s wrt interval %s" % (value, atom._interval))
-			if atom._interval[0] <= value[atom._name] <= atom._interval[1]:
+			if atom.check(value):
 				result = self.check_optimised(atom)
 			else:
 				result = self.check_optimised(lnot(atom))
-		if type(atom) is TransitionDurationInInterval:
+		elif type(atom) is TransitionDurationInInterval:
 			# just do seconds for now...
 			time_taken = value.total_seconds()
 			print("processing time taken %s wrt interval %s" % (time_taken, atom._interval))
-			if atom._interval[0] <= time_taken <= atom._interval[1]:
-				if self._optimised:
-					result = self.check_optimised(atom)
-				else:
-					result = self.check(self._formula, atom)
+			if atom.check(time_taken):
+				result = self.check_optimised(atom)
 			else:
-				if self._optimised:
-					result = self.check_optimised(lnot(atom))
-				else:
-					result = self.check(self._formula, lnot(atom))
+				result = self.check_optimised(lnot(atom))
+		elif type(atom) is StateValueEqualTo:
+			print("processing state value equality for observed valued %s wrt %s" % (str(value), str(atom._value)))
+			if atom.check(value):
+				result = self.check_optimised(atom)
+			else:
+				result = self.check_optimised(lnot(atom))
+		elif type(atom) is StateValueInOpenInterval:
+			time_taken = value.total_seconds()
+			print("processing time taken %s wrt open interval %s" % (time_taken, atom._interval))
+			if atom.check(time_taken):
+				result = self.check_optimised(atom)
+			else:
+				result = self.check_optimised(lnot(atom))
 
 		return result
 
@@ -534,7 +628,6 @@ class Checker(object):
 						self._formula.verdict = True
 						return True
 			else:
-
 				for n in range(len(occurrence.operands)):
 					if occurrence.operands[n] in [symbol, lnot(symbol)]:
 						index_in_formula = n

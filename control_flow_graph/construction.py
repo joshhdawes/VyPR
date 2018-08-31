@@ -29,6 +29,46 @@ from formula_building.formula_building import *
 
 vertices = []
 
+def get_call_name_string_reversed(obj):
+	"""
+	Given an ast.Call object in call, recursively find the string representing the function called.
+	If the call is simply a function, then this is straightforward.
+	If the call is to a method, resolving it is slightly trickier.
+	"""
+
+	if type(obj) is ast.Str:
+		return [obj.s]
+	if type(obj) is ast.Name:
+		return [obj.id]
+	elif type(obj) is ast.Attribute:
+		return [obj.attr] + get_call_name_string_reversed(obj.value)
+	elif type(obj) is ast.Call:
+		if type(obj.func) is ast.Attribute:
+			return [obj.func.attr] + get_call_name_string_reversed(obj.func.value)
+		elif type(obj.func) is ast.Subscript:
+			return get_call_name_string_reversed(obj.func.value)
+		elif type(obj.func) is ast.Name:
+			return get_call_name_string_reversed(obj.func)
+
+def get_call_name_string(obj):
+	#print(obj.func)
+	return ".".join(get_call_name_string_reversed(obj)[::-1])
+
+def get_attribute_string_reversed(obj):
+	"""
+	Given an ast.Attribute object, recursively find the string representing the attribute.
+	Basically a simpler case of resolving call strings - the code could maybe be merged at some point.
+	"""
+	if type(obj) is ast.Name:
+		return [obj.id]
+	elif type(obj) is ast.Attribute:
+		return [obj.attr] + get_attribute_string_reversed(obj.value)
+	elif type(obj) is ast.Subscript:
+		return get_attribute_string_reversed(obj.value)
+
+def get_attr_name_string(obj):
+	return ".".join(get_attribute_string_reversed(obj)[::-1])
+
 class CFGVertex(object):
 	"""
 	This class represents a vertex in a control flow graph.
@@ -36,13 +76,32 @@ class CFGVertex(object):
 	a name is mapped in Python code is changed.
 	"""
 
-	def __init__(self, name_changed):
+	def __init__(self, entry=None):
 		"""
 		Given the name changed in the state this vertex represents,
 		store it.
 		Vertices can also have multiple edges leading out of them into next states.
 		"""
-		self._name_changed = name_changed
+		if not(entry):
+			self._name_changed = []
+		else:
+			if type(entry) is ast.Assign and type(entry.value) is ast.Call:
+				# only works for a single function being called - should make this recursive
+				# for complex expressions that require multiple calls
+				self._name_changed = [get_attr_name_string(entry.targets[0]), get_call_name_string(entry.value)]
+			elif type(entry) is ast.Expr and type(entry.value) is ast.Call:
+				self._name_changed = [get_call_name_string(entry.value)]
+			elif type(entry) is ast.Assign:
+				self._name_changed = [get_attr_name_string(entry.targets[0])]
+			elif type(entry) is ast.Return:
+				if type(entry.value) is ast.Call:
+					self._name_changed = [get_call_name_string(entry.value)]
+				else:
+					# nothing else could be changed
+					self._name_changed = []
+			elif type(entry) is ast.Raise:
+				self._name_changed = [entry.type.func.id]
+
 		self.edges = []
 		self._previous_edge = None
 
@@ -52,7 +111,7 @@ class CFGVertex(object):
 
 	def __repr__(self):
 		#return "%s=> %s" % (self._name_changed, self.edges)
-		return "%s %i" % (self._name_changed, id(self._name_changed))
+		return "<Vertex changing names %s %i on line %i>" % (self._name_changed, id(self._name_changed), self._previous_edge._instruction.lineno)
 
 class CFGEdge(object):
 	"""
@@ -65,20 +124,27 @@ class CFGEdge(object):
 		self._source_state = None
 		self._target_state = None
 
-		if type(self._instruction) is ast.Assign:
-			if type(self._instruction.value) is ast.Call:
-				self._operates_on = [self._instruction.targets[0].id, self._instruction.value.func.id]
-			else:
-				self._operates_on = self._instruction.targets[0].id
+		if type(self._instruction) is ast.Assign and type(self._instruction.value) in [ast.Call, ast.Expr]:
+			# we will have to deal with other kinds of expressions at some point
+			self._operates_on = [get_attr_name_string(self._instruction.targets[0]), get_call_name_string(self._instruction.value)]
+		elif type(self._instruction) is ast.Assign and not(type(self._instruction.value) is ast.Call):
+				self._operates_on = get_attr_name_string(self._instruction.targets[0])
 		elif type(self._instruction) is ast.Expr and hasattr(self._instruction.value, "func"):
-			self._operates_on = self._instruction.value.func.id
+			self._operates_on = [get_call_name_string(self._instruction.value)]
+		elif type(self._instruction) is ast.Return and type(self._instruction.value) is ast.Call:
+			self._operates_on = [get_call_name_string(self._instruction.value)]
+		elif type(self._instruction) is ast.Raise:
+			self._operates_on = [self._instruction.type.func.id]
 		else:
-			self._operates_on = self._instruction
+			self._operates_on = [self._instruction]
 
 	def set_target_state(self, state):
 		self._target_state = state
 		if not(type(self._instruction) is str):
 			state._previous_edge = self
+
+	def __repr__(self):
+		return "<Edge with instruction %s>" % self._instruction
 
 class CFG(object):
 	"""
@@ -88,9 +154,10 @@ class CFG(object):
 	def __init__(self):
 		self.vertices = []
 		self.edges = []
-		empty_vertex = CFGVertex('')
+		empty_vertex = CFGVertex()
 		self.vertices.append(empty_vertex)
 		self.starting_vertices = empty_vertex
+		self.return_statements = []
 
 	def process_block(self, block, starting_vertices=None, condition=[]):
 		"""
@@ -104,8 +171,10 @@ class CFG(object):
 		print("processing block", block)
 
 		for (n, entry) in enumerate(block):
-			if type(entry) is ast.Assign or (type(entry) is ast.Expr and hasattr(entry.value, "func")):
+			if type(entry) is ast.Assign or (type(entry) is ast.Expr and type(entry.value) is ast.Call):
+
 				condition_to_use = condition if n == 0 else []
+
 				# for each vertex in current_vertices, add an edge
 				new_edges = []
 				for vertex in current_vertices:
@@ -113,20 +182,66 @@ class CFG(object):
 					new_edge = CFGEdge(condition_to_use, entry)
 					new_edges.append(new_edge)
 					vertex.add_outgoing_edge(new_edge)
+
 				# create a new vertex for the state created here
-				new_vertex = None
-				if type(entry) is ast.Assign:
-					print("adding vertex for change of value for name %s" % entry.targets[0].id)
-					new_vertex = CFGVertex(entry.targets[0].id)
-				elif type(entry) is ast.Expr:
-					#print("expression triggered", entry.value.__dict__)
-					# only deal with function calls
-					if hasattr(entry.value, "func"):
-						print("adding vertex for result of function call of %s" % entry.value.func.id)
-						new_vertex = CFGVertex(entry.value.func.id)
+				new_vertex = CFGVertex(entry)
 
 				self.vertices.append(new_vertex)
 				self.edges += new_edges
+
+				# direct all new edges to this new vertex
+				for edge in new_edges:
+					edge.set_target_state(new_vertex)
+
+				# update current vertices
+				current_vertices = [new_vertex]
+
+				# filter out vertices that were returns or raises
+				current_vertices = filter(lambda vertex : not(type(vertex._previous_edge._instruction) in [ast.Return, ast.Raise]), current_vertices)
+
+			elif type(entry) is ast.Return:
+
+				condition_to_use = condition if n == 0 else []
+
+				new_edges = []
+				for vertex in current_vertices:
+					entry._parent_body = block
+					new_edge = CFGEdge(condition_to_use, entry)
+					new_edges.append(new_edge)
+					vertex.add_outgoing_edge(new_edge)
+
+				new_vertex = CFGVertex(entry)
+
+				self.vertices.append(new_vertex)
+				self.edges += new_edges
+
+				# direct all new edges to this new vertex
+				for edge in new_edges:
+					edge.set_target_state(new_vertex)
+
+				# update current vertices
+				current_vertices = [new_vertex]
+
+				self.return_statements.append(new_vertex)
+
+				print("return statements are %s" % self.return_statements)
+
+			elif type(entry) is ast.Raise:
+
+				condition_to_use = condition if n == 0 else []
+
+				new_edges = []
+				for vertex in current_vertices:
+					entry._parent_body = block
+					new_edge = CFGEdge(condition_to_use, entry)
+					new_edges.append(new_edge)
+					vertex.add_outgoing_edge(new_edge)
+
+				new_vertex = CFGVertex(entry)
+
+				self.vertices.append(new_vertex)
+				self.edges += new_edges
+
 				# direct all new edges to this new vertex
 				for edge in new_edges:
 					edge.set_target_state(new_vertex)
@@ -135,6 +250,8 @@ class CFG(object):
 				current_vertices = [new_vertex]
 
 			elif type(entry) is ast.If:
+				# if we just have an if without an else block, this misses out the edge going from the state
+				# before the conditional to the state after it (if the condition is false)
 				# compute a list of pairs (condition, block) derived from the conditional
 				pairs = [([entry.test], entry.body)]
 
@@ -145,6 +262,7 @@ class CFG(object):
 				current_condition_set = [formula_tree.lnot(entry.test)]
 
 				current_conditional = [entry]
+				final_else_is_present = False
 				# won't work when there is something after the second if in the else clause
 				while type(current_conditional[0]) is ast.If:
 					current_conditional = current_conditional[0].orelse
@@ -154,6 +272,7 @@ class CFG(object):
 							current_condition_set.append(formula_tree.lnot(current_conditional[0].test))
 						else:
 							pairs.append((current_condition_set, current_conditional))
+							final_else_is_present = True
 					else:
 						# nowhere else to go in the traversal
 						break
@@ -167,9 +286,34 @@ class CFG(object):
 					final_conditional_vertices += final_vertices
 					#vertices += final_vertices
 
-				current_vertices = final_conditional_vertices
+				# we include the vertex before the conditional, only if there was no else
+				if not(final_else_is_present):
+					current_vertices = final_conditional_vertices + current_vertices
+				else:
+					current_vertices = final_conditional_vertices
+				# filter out vertices that were returns or raises
+				current_vertices = filter(lambda vertex : not(type(vertex._previous_edge._instruction) in [ast.Return, ast.Raise]), current_vertices)
+
+			elif type(entry) is ast.TryExcept:
+
+				blocks = [entry.body]
+
+				for except_handler in entry.handlers:
+					blocks.append(except_handler.body)
+
+				final_try_catch_vertices = []
+				for block_item in blocks:
+					final_vertices = self.process_block(block_item, current_vertices, ['try-catch'])
+					final_try_catch_vertices += final_vertices
+
+				current_vertices = final_try_catch_vertices
+
+				# filter out vertices that were returns or raises
+				current_vertices = filter(lambda vertex : not(type(vertex._previous_edge._instruction) in [ast.Return, ast.Raise]), current_vertices)
 
 			elif type(entry) is ast.For:
+
+				# this will eventually be modified to include the loop variable as the state changed
 
 				# process loop body
 				final_vertices = self.process_block(entry.body, current_vertices, ['for'])
@@ -182,6 +326,21 @@ class CFG(object):
 
 				for final_vertex in final_vertices:
 					for base_vertex in current_vertices:
+						new_positive_edge = CFGEdge('loop-jump', 'loop-jump')
+						self.edges.append(new_positive_edge)
+						final_vertex.add_outgoing_edge(new_positive_edge)
+						new_positive_edge.set_target_state(base_vertex)
+
+				current_vertices = final_vertices
+
+			elif type(entry) is ast.While:
+
+				final_vertices = self.process_block(entry.body, current_vertices, ['while'])
+
+				print("final vertex in loop", current_vertices[0].edges[0]._target_state)
+
+				for final_vertex in final_vertices:
+					for base_vertex in current_vertices:
 						new_positive_edge = CFGEdge('for', 'loop-jump')
 						self.edges.append(new_positive_edge)
 						final_vertex.add_outgoing_edge(new_positive_edge)
@@ -189,13 +348,15 @@ class CFG(object):
 
 				current_vertices = final_vertices
 
+
+
 		print("finished processing block")
 
 		return current_vertices
 
 	def next_calls(self, vertex, function, calls=[], marked_vertices=[]):
 		"""
-		Given a vertex, find the set of next edges that model calls to function.
+		Given a point (vertex or edge), find the set of next edges that model calls to function.
 		"""
 		print("marked vertices are %s" % marked_vertices)
 		if not(vertex in marked_vertices):
@@ -203,10 +364,13 @@ class CFG(object):
 			marked_vertices.append(vertex)
 			edges = vertex.edges
 			for edge in edges:
-				if (type(edge._instruction) is ast.Expr
+				if ((type(edge._instruction) is ast.Expr
 					and hasattr(edge._instruction.value, "func")
-					and edge._instruction.value.func.id == function):
-					print("edge calling %s is counted" % edge._instruction.value.func.id)
+					and get_call_name_string(edge._instruction.value) == function)
+					or
+					(type(edge._instruction) is ast.Assign
+					and type(edge._instruction.value) is ast.Call and get_call_name_string(edge._instruction.value) == function)):
+					print("edge calling %s is counted" % get_call_name_string(edge._instruction.value))
 					calls.append(edge)
 				else:
 					# this edge is not what we're looking for
@@ -224,6 +388,6 @@ def expression_as_string(expression):
 
 def instruction_to_string(instruction):
 	if type(instruction) is ast.Assign:
-		return "%s = %s" % (instruction.targets[0].id, expression_as_string(instruction.value))
+		return "%s = %s" % (get_attr_name_string(instruction.targets[0]), expression_as_string(instruction.value))
 	elif type(instruction) is ast.Expr:
-		return "%s()" % (instruction.value.func.id)
+		return "%s()" % get_call_name_string(instruction.value)

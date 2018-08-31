@@ -112,6 +112,8 @@ class Forall(object):
 class StaticState(object):
 	"""
 	Models a binding obtained from a QD consisting of states.
+	Needs to be modified to only allow certain methods (equals, length, etc) to be called
+	if the __call__ method has already been called, and throw an exception otherwise.
 	"""
 
 	def __init__(self, bind_variable_name, name_changed, uses=None):
@@ -127,6 +129,12 @@ class StaticState(object):
 	def _in(self, interval):
 		return formula_tree.StateValueInInterval(self, self._name, interval)
 
+	def equals(self, value):
+		return formula_tree.StateValueEqualTo(self, self._name, value)
+
+	def length(self):
+		return formula_tree.StateValueLength(self)
+
 	def _next_transition(self, operates_on):
 		return NextStaticTransition(self, operates_on)
 
@@ -137,10 +145,22 @@ class StaticState(object):
 			return "%s = StaticState(changes=%s)" % (self._bind_variable_name, self._name_changed)
 
 	def __eq__(self, other):
-		return (self._bind_variable_name == other._bind_variable_name and
+		return (type(other) is StaticState and
+			self._bind_variable_name == other._bind_variable_name and
 			self._name == other._name and
 			self._name_changed == other._name_changed and
 			self._required_binding == other._required_binding)
+
+class StaticStateLength(object):
+	"""
+	Models the length being measured of a value given by a state from a QD.
+	"""
+
+	def __init__(self, static_state):
+		self._static_state = static_state
+
+	def _in(self, interval):
+		return formula_tree.StateValueLengthInInterval(self, self._static_state._name, interval)
 
 
 class StaticTransition(object):
@@ -166,7 +186,8 @@ class StaticTransition(object):
 			return "%s = StaticTransition(operates_on=%s)" % (self._bind_variable_name, self._operates_on)
 
 	def __eq__(self, other):
-		return (self._bind_variable_name == other._bind_variable_name and
+		return (type(other) is StaticTransition and
+			self._bind_variable_name == other._bind_variable_name and
 			self._operates_on == other._operates_on and
 			self._required_binding == other._required_binding)
 
@@ -183,7 +204,8 @@ class NextStaticTransition(StaticTransition):
 		return "next_transition(%s, %s)" % (str(self._centre), self._operates_on)
 
 	def __eq__(self, other):
-		return (self._centre == other._centre and
+		return (type(other) is NextStaticTransition and
+			self._centre == other._centre and
 			self._operates_on == other._operates_on)
 
 
@@ -196,7 +218,12 @@ class Duration(object):
 		self._transition = transition
 
 	def _in(self, interval):
-		return formula_tree.TransitionDurationInInterval(self._transition, interval)
+		if type(interval) is list:
+			return formula_tree.TransitionDurationInInterval(self._transition, interval)
+		elif type(interval) is tuple:
+			return formula_tree.TransitionDurationInOpenInterval(self._transition, interval)
+		else:
+			raise Exception("Duration predicate wasn't defined properly.")
 
 class RuntimeState(object):
 	"""
@@ -228,6 +255,9 @@ def derive_composition_sequence(atom):
 	sequence = [atom]
 	if type(atom) is formula_tree.TransitionDurationInInterval:
 		current_operator = atom._transition
+	elif type(atom) is formula_tree.StateValueEqualTo:
+		sequence.append(atom._state)
+		return sequence
 	elif type(atom) is formula_tree.StateValueInInterval:
 		sequence.append(atom._state)
 		return sequence

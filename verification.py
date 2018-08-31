@@ -110,6 +110,13 @@ def compute_binding_space(quantifier_sequence, scfg, reachability_map, current_b
 		if type(quantifier_sequence._bind_variables[0]) is StaticState:
 			variable_changed = quantifier_sequence._bind_variables[0]._name_changed
 			qd = filter(lambda symbolic_state : symbolic_state._name_changed == variable_changed or variable_changed in symbolic_state._name_changed, scfg.vertices)
+		elif type(quantifier_sequence._bind_variables[0]) is StaticTransition:
+			variable_operated_on = quantifier_sequence._bind_variables[0]._operates_on
+			relevant_target_vertices = filter(
+				lambda symbolic_state : symbolic_state._name_changed == variable_operated_on or variable_operated_on in symbolic_state._name_changed,
+				scfg.vertices
+			)
+			qd = map(lambda symbolic_state : symbolic_state._previous_edge, relevant_target_vertices)
 
 		print("computed independent qd: %s" % qd)
 		# for now don't handle transitions
@@ -228,6 +235,7 @@ if __name__ == "__main__":
 
 	# a function used in the imported code
 	def f(a): print("***************f is executing with input %f*******************" % a);time.sleep(a);
+	def g(a): print("g is called!!"); time.sleep(a/10)
 	def database_operation(db): time.sleep(0.5)
 	def close_connection(db): time.sleep(0.5)
 	def operation(t): time.sleep(t)
@@ -263,7 +271,7 @@ if __name__ == "__main__":
 		graph.attr("graph", splines="true", fontsize="10")
 		shape = "circle"
 		for vertex in new_scfg.vertices:
-			graph.node(str(id(vertex)), vertex._name_changed, shape=shape)
+			graph.node(str(id(vertex)), str(vertex._name_changed), shape=shape)
 			for edge in vertex.edges:
 				graph.edge(
 					str(id(vertex)),
@@ -393,7 +401,10 @@ if __name__ == "__main__":
 				if type(move) is NextStaticTransition:
 					print("computing next transitions operating on %s from %s for %s" % (move._operates_on, move._centre, move))
 					calls = []
-					new_scfg.next_calls(value_from_binding, move._operates_on, calls, marked_vertices=[])
+					if type(value_from_binding) is CFGVertex:
+						new_scfg.next_calls(value_from_binding, move._operates_on, calls, marked_vertices=[])
+					elif type(value_from_binding) is CFGEdge:
+						new_scfg.next_calls(value_from_binding._target_state, move._operates_on, calls, marked_vertices=[])
 					print("next calls to %s are " % move._operates_on, calls)
 					instrumentation_points = calls
 
@@ -647,11 +658,11 @@ if __name__ == "__main__":
 			pprint(static_qd_to_point_map[static_qd_index][bind_variable_index])
 
 			# get all the instrumentation points associated with bind_variable_index
-			relevant_instrumentation_points = []
+			"""relevant_instrumentation_points = []
 			for pair in static_qd_to_point_map[static_qd_index][bind_variable_index]:
-				relevant_instrumentation_points += pair[0]
+				relevant_instrumentation_points += pair[0]"""
 
-			print("relevant instrumentation points", relevant_instrumentation_points)
+			#print("relevant instrumentation points", relevant_instrumentation_points)
 			print("instrumentation point received from", instrumentation_point)
 
 			# decide what instrumentation_point can trigger (monitor update, new monitor, or nothing at all)
@@ -675,6 +686,8 @@ if __name__ == "__main__":
 				branch_minimal = True
 				static_bindings_to_trigger_points[static_qd_index] = {}
 				static_bindings_to_trigger_points[static_qd_index][bind_variable_index] = instrumentation_point
+
+			print("BRANCH MINIMAL:", branch_minimal)
 
 			#if relevant_instrumentation_points[0] == instrumentation_point:
 			if branch_minimal:
@@ -895,6 +908,10 @@ if __name__ == "__main__":
 									add_monitor_size_point(static_qd_index, n, len(monitors[n].get_unresolved_atoms()), sub_verdict, "existing")
 
 						print("PROCESSING DONE FOR ATOM %s with value %s" % (associated_atom, observed_value))
+
+						print("*****")
+						print(static_bindings_to_monitor_states)
+						print("*****")
 
 			else:
 				# this point can't trigger instantiation of a monitor for this element of the static qd
