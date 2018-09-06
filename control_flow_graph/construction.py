@@ -130,7 +130,8 @@ class CFGVertex(object):
 
 	def __repr__(self):
 		#return "%s=> %s" % (self._name_changed, self.edges)
-		return "<Vertex changing names %s %i on line %i>" % (self._name_changed, id(self._name_changed), self._previous_edge._instruction.lineno)
+		#return "<Vertex changing names %s %i on line %i>" % (self._name_changed, id(self._name_changed), self._previous_edge._instruction.lineno)
+		return "<Vertex changing names %s %i>" % (self._name_changed, id(self._name_changed))
 
 class CFGEdge(object):
 	"""
