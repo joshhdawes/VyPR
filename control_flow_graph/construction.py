@@ -29,12 +29,10 @@ from formula_building.formula_building import *
 
 vertices = []
 
-def get_call_name_string_reversed(obj):
-	"""
+"""def get_call_name_string_reversed(obj):
 	Given an ast.Call object in call, recursively find the string representing the function called.
 	If the call is simply a function, then this is straightforward.
 	If the call is to a method, resolving it is slightly trickier.
-	"""
 
 	if type(obj) is ast.Str:
 		return [obj.s]
@@ -52,7 +50,26 @@ def get_call_name_string_reversed(obj):
 
 def get_call_name_string(obj):
 	#print(obj.func)
-	return ".".join(get_call_name_string_reversed(obj)[::-1])
+	return ".".join(get_call_name_string_reversed(obj)[::-1])"""
+
+def get_call_name_strings(obj):
+	chain = list(ast.walk(obj))
+	all_calls = filter(lambda item : type(item) is ast.Call, chain)
+	full_names = {}
+	for call in all_calls:
+	    # construct the full function name for this call
+	    current_item = call
+	    full_names[call] = []
+	    while not(type(current_item) is str):
+	            if type(current_item) is ast.Call:
+	                    current_item = current_item.func
+	            elif type(current_item) is ast.Attribute:
+	                    full_names[call].append(current_item.attr)
+	                    current_item = current_item.value
+	            elif type(current_item) is ast.Name:
+	                    full_names[call].append(current_item.id)
+	                    current_item = current_item.id
+	return map(lambda item : ".".join(reversed(item)), full_names.values())
 
 def get_attribute_string_reversed(obj):
 	"""
@@ -88,19 +105,21 @@ class CFGVertex(object):
 			if type(entry) is ast.Assign and type(entry.value) is ast.Call:
 				# only works for a single function being called - should make this recursive
 				# for complex expressions that require multiple calls
-				self._name_changed = [get_attr_name_string(entry.targets[0]), get_call_name_string(entry.value)]
+				self._name_changed = [get_attr_name_string(entry.targets[0])] + get_call_name_strings(entry)
 			elif type(entry) is ast.Expr and type(entry.value) is ast.Call:
-				self._name_changed = [get_call_name_string(entry.value)]
+				self._name_changed = get_call_name_strings(entry.value)
 			elif type(entry) is ast.Assign:
 				self._name_changed = [get_attr_name_string(entry.targets[0])]
 			elif type(entry) is ast.Return:
 				if type(entry.value) is ast.Call:
-					self._name_changed = [get_call_name_string(entry.value)]
+					self._name_changed = get_call_name_strings(entry.value)
 				else:
 					# nothing else could be changed
 					self._name_changed = []
 			elif type(entry) is ast.Raise:
 				self._name_changed = [entry.type.func.id]
+			elif type(entry) is ast.Print:
+				self._name_changed = ["print"]
 
 		self.edges = []
 		self._previous_edge = None
@@ -126,13 +145,13 @@ class CFGEdge(object):
 
 		if type(self._instruction) is ast.Assign and type(self._instruction.value) in [ast.Call, ast.Expr]:
 			# we will have to deal with other kinds of expressions at some point
-			self._operates_on = [get_attr_name_string(self._instruction.targets[0]), get_call_name_string(self._instruction.value)]
+			self._operates_on = [get_attr_name_string(self._instruction.targets[0])] + get_call_name_strings(self._instruction.value)
 		elif type(self._instruction) is ast.Assign and not(type(self._instruction.value) is ast.Call):
 				self._operates_on = get_attr_name_string(self._instruction.targets[0])
 		elif type(self._instruction) is ast.Expr and hasattr(self._instruction.value, "func"):
-			self._operates_on = [get_call_name_string(self._instruction.value)]
+			self._operates_on = get_call_name_strings(self._instruction.value)
 		elif type(self._instruction) is ast.Return and type(self._instruction.value) is ast.Call:
-			self._operates_on = [get_call_name_string(self._instruction.value)]
+			self._operates_on = get_call_name_strings(self._instruction.value)
 		elif type(self._instruction) is ast.Raise:
 			self._operates_on = [self._instruction.type.func.id]
 		else:
@@ -227,6 +246,29 @@ class CFG(object):
 				print("return statements are %s" % self.return_statements)
 
 			elif type(entry) is ast.Raise:
+
+				condition_to_use = condition if n == 0 else []
+
+				new_edges = []
+				for vertex in current_vertices:
+					entry._parent_body = block
+					new_edge = CFGEdge(condition_to_use, entry)
+					new_edges.append(new_edge)
+					vertex.add_outgoing_edge(new_edge)
+
+				new_vertex = CFGVertex(entry)
+
+				self.vertices.append(new_vertex)
+				self.edges += new_edges
+
+				# direct all new edges to this new vertex
+				for edge in new_edges:
+					edge.set_target_state(new_vertex)
+
+				# update current vertices
+				current_vertices = [new_vertex]
+
+			elif type(entry) is ast.Print:
 
 				condition_to_use = condition if n == 0 else []
 
@@ -349,7 +391,6 @@ class CFG(object):
 				current_vertices = final_vertices
 
 
-
 		print("finished processing block")
 
 		return current_vertices
@@ -366,11 +407,11 @@ class CFG(object):
 			for edge in edges:
 				if ((type(edge._instruction) is ast.Expr
 					and hasattr(edge._instruction.value, "func")
-					and get_call_name_string(edge._instruction.value) == function)
+					and function in get_call_name_strings(edge._instruction.value))
 					or
 					(type(edge._instruction) is ast.Assign
-					and type(edge._instruction.value) is ast.Call and get_call_name_string(edge._instruction.value) == function)):
-					print("edge calling %s is counted" % get_call_name_string(edge._instruction.value))
+					and type(edge._instruction.value) is ast.Call and function in get_call_name_strings(edge._instruction.value))):
+					print("edge calling %s is counted" % get_call_name_strings(edge._instruction.value))
 					calls.append(edge)
 				else:
 					# this edge is not what we're looking for
@@ -390,4 +431,4 @@ def instruction_to_string(instruction):
 	if type(instruction) is ast.Assign:
 		return "%s = %s" % (get_attr_name_string(instruction.targets[0]), expression_as_string(instruction.value))
 	elif type(instruction) is ast.Expr:
-		return "%s()" % get_call_name_string(instruction.value)
+		return "%s()" % get_call_name_strings(instruction.value)
