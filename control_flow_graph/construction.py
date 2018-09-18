@@ -1,3 +1,6 @@
+from __future__ import print_function
+def print(*args, **kwards):
+	pass
 """
 (C) Copyright 2018 CERN and University of Manchester.
 This software is distributed under the terms of the GNU General Public Licence version 3 (GPL Version 3), copied verbatim in the file "COPYING".
@@ -334,8 +337,24 @@ class CFG(object):
 					current_vertices = final_conditional_vertices + current_vertices
 				else:
 					current_vertices = final_conditional_vertices
+
 				# filter out vertices that were returns or raises
 				current_vertices = filter(lambda vertex : not(type(vertex._previous_edge._instruction) in [ast.Return, ast.Raise]), current_vertices)
+
+				# add an empty "control flow" vertex after the conditional
+				# to avoid transition duplication along the edges leaving
+				# the conditional
+
+				empty_vertex = CFGVertex()
+				self.vertices.append(empty_vertex)
+				for vertex in current_vertices:
+					# an empty edge
+					new_edge = CFGEdge("post-condition", "control-flow")
+					self.edges.append(new_edge)
+					new_edge.set_target_state(empty_vertex)
+					vertex.add_outgoing_edge(new_edge)
+
+				current_vertices = [empty_vertex]
 
 			elif type(entry) is ast.TryExcept:
 
@@ -358,14 +377,27 @@ class CFG(object):
 
 				# this will eventually be modified to include the loop variable as the state changed
 
+				empty_pre_loop_vertex = CFGVertex()
+				empty_post_loop_vertex = CFGVertex()
+				self.vertices.append(empty_pre_loop_vertex)
+				self.vertices.append(empty_post_loop_vertex)
+
+				# link current_vertices to the pre-loop vertex
+				for vertex in current_vertices:
+					new_edge = CFGEdge("pre-loop", "control-flow")
+					self.edges.append(new_edge)
+					vertex.add_outgoing_edge(new_edge)
+					new_edge.set_target_state(empty_pre_loop_vertex)
+
+				current_vertices = [empty_pre_loop_vertex]
+
 				# process loop body
 				final_vertices = self.process_block(entry.body, current_vertices, ['for'])
 
 				print("final vertex in loop", current_vertices[0].edges[0]._target_state)
 
-				# add 2 edges from the final_vertex - one going back to the start of the loop
-				# with the positive condition, and one going to the next vertex
-				# though addition of the first is done automatically
+				# add 2 edges from the final_vertex - one going back to the pre-loop vertex
+				# with the positive condition, and one going to the post loop vertex.
 
 				for final_vertex in final_vertices:
 					for base_vertex in current_vertices:
@@ -374,7 +406,12 @@ class CFG(object):
 						final_vertex.add_outgoing_edge(new_positive_edge)
 						new_positive_edge.set_target_state(base_vertex)
 
-				current_vertices = final_vertices
+						new_post_edge = CFGEdge("post-loop")
+						self.edges.append(new_post_edge)
+						final_vertex.add_outgoing_edge(new_post_edge)
+						new_post_edge.set_target_state(empty_post_loop_vertex)
+
+				current_vertices = [empty_post_loop_vertex]
 
 			elif type(entry) is ast.While:
 

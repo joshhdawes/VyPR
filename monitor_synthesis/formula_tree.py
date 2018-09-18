@@ -1,3 +1,6 @@
+from __future__ import print_function
+def print(*args, **kwards):
+	pass
 """
 (C) Copyright 2018 CERN and University of Manchester.
 This software is distributed under the terms of the GNU General Public Licence version 3 (GPL Version 3), copied verbatim in the file "COPYING".
@@ -398,35 +401,47 @@ class CheckerState(object):
 		positive_key = self._state.keys()[positive_key_index]
 		negative_key = self._state.keys()[negative_key_index]
 
-		if formula_is_derived_from_atom(symbol):
+		"""if formula_is_derived_from_atom(symbol):
 			self._state[positive_key] = True
 			self._state[negative_key] = False
 		elif type(symbol) is LogicalNot and formula_is_derived_from_atom(symbol.operand):
 			self._state[positive_key] = False
-			self._state[negative_key] = True
+			self._state[negative_key] = True"""
+		# the atom provided is true based on the observed data, so the "positive" instance
+		# is always true - it may be the case that the "negative" instance
+		# is a double negative.
+		self._state[positive_key] = True
+		self._state[negative_key] = False
+
+		# used to distinguish between monitors generated between iterations in loops
+		self._monitor_instantiation_time = datetime.datetime.now()
 
 	def __repr__(self):
-		return str(self._state)
+		return "%s - %s" % (str(self._monitor_instantiation_time), str(self._state))
 
 	def __eq__(self, other):
 		print("CHECKING EQUALITY OF MONITOR STATES")
-		if type(other) is CheckerState:
-			other = other._state
-		else:
+		if not(type(other) is CheckerState):
 			return False
 
-		print(self._state)
+		print(self)
 		print(other)
+
+		print("CHECKING TIMESTAMP")
+		if self._monitor_instantiation_time != other._monitor_instantiation_time:
+			# even with the same states, these are two different configurations
+			# from the same static binding so we need to keep both
+			return False
 
 		keys = self._state.keys()
 		for key in keys:
 			print("CHECKING KEY %s" % key)
-			if not(key in other.keys()):
+			if not(key in other._state.keys()):
 				print("key %s not in other %s" % (key, other))
 				return False
 			else:
-				key_index = other.keys().index(key)
-				value_in_other = other[other.keys()[key_index]]
+				key_index = other._state.keys().index(key)
+				value_in_other = other._state[other._state.keys()[key_index]]
 				if value_in_other != self._state[key]:
 					print("%s : %s != %s" % (key, value_in_other, self._state[key]))
 					return False
@@ -522,7 +537,7 @@ class Checker(object):
 	def __repr__(self):
 		return "Monitor state for formula %s is %s" % (self._original_formula, str(self._formula))
 
-	def process_atom_and_value(self, atom, value):
+	def process_atom_and_value(self, atom, value, force_monitor_update=False):
 		"""
 		Given an atom and a value, update this monitor.
 		"""
@@ -530,41 +545,41 @@ class Checker(object):
 		if type(atom) is StateValueInInterval:
 			print("processing binding %s wrt interval %s" % (value, atom._interval))
 			if atom.check(value):
-				result = self.check_optimised(atom)
+				result = self.check_optimised(atom, force_monitor_update=force_monitor_update)
 			else:
-				result = self.check_optimised(lnot(atom))
+				result = self.check_optimised(lnot(atom), force_monitor_update=force_monitor_update)
 		elif type(atom) is TransitionDurationInInterval:
 			# just do seconds for now...
 			time_taken = value.total_seconds()
 			print("processing time taken %s wrt interval %s" % (time_taken, atom._interval))
 			if atom.check(time_taken):
-				result = self.check_optimised(atom)
+				result = self.check_optimised(atom, force_monitor_update=force_monitor_update)
 			else:
-				result = self.check_optimised(lnot(atom))
+				result = self.check_optimised(lnot(atom), force_monitor_update=force_monitor_update)
 		elif type(atom) is StateValueEqualTo:
 			print("processing state value equality for observed valued %s wrt %s" % (str(value), str(atom._value)))
 			if atom.check(value):
-				result = self.check_optimised(atom)
+				result = self.check_optimised(atom, force_monitor_update=force_monitor_update)
 			else:
-				result = self.check_optimised(lnot(atom))
+				result = self.check_optimised(lnot(atom), force_monitor_update=force_monitor_update)
 		elif type(atom) is StateValueInOpenInterval:
 			time_taken = value.total_seconds()
 			print("processing time taken %s wrt open interval %s" % (time_taken, atom._interval))
 			if atom.check(time_taken):
-				result = self.check_optimised(atom)
+				result = self.check_optimised(atom, force_monitor_update=force_monitor_update)
 			else:
-				result = self.check_optimised(lnot(atom))
+				result = self.check_optimised(lnot(atom), force_monitor_update=force_monitor_update)
 
 		return result
 
-	def check_optimised(self, symbol):
+	def check_optimised(self, symbol, force_monitor_update=False):
 		"""
 		Given a symbol, find the formula occurrences that contain this symbol.
 		For each of the occurrences, replace the atom with the appropriate value (T or F).
 		Then loop up through the parents while each successive parent can be collapsed to a truth value.
 		"""
 
-		if not(self._formula.verdict is None):
+		if not(force_monitor_update) and not(self._formula.verdict is None):
 			print("a verdict has been arrived at - no observations can change it")
 			return self._formula.verdict
 

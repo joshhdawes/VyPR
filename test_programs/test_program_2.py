@@ -7,8 +7,10 @@ Author: Joshua Dawes - CERN, University of Manchester - joshua.dawes@cern.ch
 """
 
 a = 10
-for i in range(4):
+for i in range(30):
 	if i < 3:
 		f(0.1)
 	else:
 		f(1.1)
+
+g(50)

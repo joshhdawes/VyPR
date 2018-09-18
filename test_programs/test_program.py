@@ -6,25 +6,33 @@ In applying this licence, CERN does not waive the privileges and immunities gran
 Author: Joshua Dawes - CERN, University of Manchester - joshua.dawes@cern.ch
 """
 
+def f(n):
+	import time
+	print("f is executing - sleeping for %f seconds" % n)
+	time.sleep(n)
+
 x = 3
 b = 60
-for i in range(0, 3):
-	a = 40 + i
+for i in range(0, 10):
+	a = 75+i
 	for j in range(0, 5):
 		if j < 3:
 			z = 3
 		else:
 			z = 4
-	f(1.1)
+	f(float(i)/100000.0)
 	print("end of iteration of loop")
+
 y = 3
 a = 50
 i = 5
 j = 5
 if a < b:
 	if i == j:
-		for n in range(3):
+		for n in range(20):
 			f(0.2)
+		for n in range(50):
+			f(0.1)
 	c = 30
 elif a < b + 10:
 	d = 50
@@ -33,5 +41,6 @@ elif a < b + 20:
 	e = 70
 else:
 	g = 20
+	print("TRAVERSING LAST BRANCH")
 	f(2)
 d = 30

@@ -234,7 +234,7 @@ if __name__ == "__main__":
 	ast_obj = ast.parse(code)
 
 	# a function used in the imported code
-	def f(a): print("***************f is executing with input %f*******************" % a);time.sleep(a);
+	#def f(a): print("***************f is executing with input %f*******************" % a);time.sleep(a);
 	def g(a): print("g is called!!"); time.sleep(a/10)
 	def database_operation(db): time.sleep(0.5)
 	def close_connection(db): time.sleep(0.5)
@@ -470,9 +470,8 @@ if __name__ == "__main__":
 							timer_end_statement = "__timer_e = datetime.datetime.now()"
 							# we put a pair (index in static qd, index in instrumentation points)
 							# this determines the point in the static cfg that will be executed
-							time_difference_statement = ("__duration = __timer_e - __timer_s; queue.put((%i, %i, %i, %i, __duration, %i, %i));" +\
-														"print('instrument firing!', %i, %i, list(queue.queue));") %\
-								(m, bind_variable_index, atom_index, n, atoms.index(atom), point._instruction.lineno, m, bind_variable_index)
+							time_difference_statement = ("__duration = __timer_e - __timer_s; queue.put((%i, %i, %i, %i, __duration, %i, %i));") %\
+								(m, bind_variable_index, atom_index, n, atoms.index(atom), point._instruction.lineno)#, m, bind_variable_index)
 
 							# timing instruction - helps with performance analysis
 							timing_point_statement = "add_timing_point('instrumented instruction on line %i')" % point._instruction.lineno
@@ -481,7 +480,7 @@ if __name__ == "__main__":
 							end_ast = ast.parse(timer_end_statement).body[0]
 							difference_ast = ast.parse(time_difference_statement).body[0]
 							queue_ast = ast.parse(time_difference_statement).body[1]
-							print_ast = ast.parse(time_difference_statement).body[2]
+							#print_ast = ast.parse(time_difference_statement).body[2]
 							timing_point_ast = ast.parse(timing_point_statement).body[0]
 
 							add_timing_point("constructed asts for transition duration instrument")
@@ -493,8 +492,8 @@ if __name__ == "__main__":
 							difference_ast.lineno = point._instruction.lineno
 							difference_ast.col_offset = point._instruction.col_offset
 
-							print_ast.lineno = point._instruction.lineno
-							print_ast.col_offset = point._instruction.col_offset
+							#print_ast.lineno = point._instruction.lineno
+							#print_ast.col_offset = point._instruction.col_offset
 
 							queue_ast.lineno = point._instruction.lineno
 							queue_ast.col_offset = point._instruction.col_offset
@@ -507,7 +506,7 @@ if __name__ == "__main__":
 
 							# instruments are added in reverse order
 							point._instruction._parent_body.insert(index_in_block+1, timing_point_ast)
-							point._instruction._parent_body.insert(index_in_block+1, print_ast)
+							#point._instruction._parent_body.insert(index_in_block+1, print_ast)
 							point._instruction._parent_body.insert(index_in_block+1, queue_ast)
 							point._instruction._parent_body.insert(index_in_block+1, difference_ast)
 							point._instruction._parent_body.insert(index_in_block+1, end_ast)
@@ -592,13 +591,13 @@ if __name__ == "__main__":
 			try:
 				top_pair = queue.get(timeout=1)
 			except:
-				print("queue empty - not attempting consumption")
+				#print("queue empty - not attempting consumption")
 				continue
 
-			print("="*100)
+			#print("="*100)
 
-			print("CONSUMING ", top_pair)
-			print("queue is now %s" % str(queue.queue))
+			#print("CONSUMING ", top_pair)
+			#print("queue is now %s" % str(queue.queue))
 
 			add_timing_point("beginning consumption of tuple %s" % str(top_pair))
 
@@ -619,7 +618,7 @@ if __name__ == "__main__":
 				if static_bindings_to_trigger_points[static_qd_index].get(bind_variable_index):
 					static_bindings_to_trigger_points[static_qd_index][bind_variable_index] = None
 
-				print("Set partition set trigger for static qd %i and bind variable index %i to None" % (static_qd_index, bind_variable_index))
+				#print("Set partition set trigger for static qd %i and bind variable index %i to None" % (static_qd_index, bind_variable_index))
 
 				# continue onto the next iteration of the consumption loop
 				# trigger instrumentation points don't contribute to the monitor state
@@ -650,20 +649,20 @@ if __name__ == "__main__":
 			if args.generate_vis_data:
 				output_graph_with_highlight(instrumentation_point)
 
-			print(instrumentation_point, static_qd_index)
+			#print(instrumentation_point, static_qd_index)
 
 			# for now, instruments point to single qd bindings so no need to compute a set
 			# of valid binding indices
 
-			pprint(static_qd_to_point_map[static_qd_index][bind_variable_index])
+			#pprint(static_qd_to_point_map[static_qd_index][bind_variable_index])
 
 			# get all the instrumentation points associated with bind_variable_index
 			"""relevant_instrumentation_points = []
 			for pair in static_qd_to_point_map[static_qd_index][bind_variable_index]:
 				relevant_instrumentation_points += pair[0]"""
 
-			#print("relevant instrumentation points", relevant_instrumentation_points)
-			print("instrumentation point received from", instrumentation_point)
+			##print("relevant instrumentation points", relevant_instrumentation_points)
+			#print("instrumentation point received from", instrumentation_point)
 
 			# decide what instrumentation_point can trigger (monitor update, new monitor, or nothing at all)
 			# for now the criteria is whether it is the first element in the list
@@ -687,231 +686,222 @@ if __name__ == "__main__":
 				static_bindings_to_trigger_points[static_qd_index] = {}
 				static_bindings_to_trigger_points[static_qd_index][bind_variable_index] = instrumentation_point
 
-			print("BRANCH MINIMAL:", branch_minimal)
+			#print("BRANCH MINIMAL:", branch_minimal)
 
 			#if relevant_instrumentation_points[0] == instrumentation_point:
 			if branch_minimal:
-				print("USING STATIC QD INDEX %i" % static_qd_index)
-				# the instrumented point is the first in the list for this point in the qd
-				# we now check for existing monitors associated with this instrumentation point
-				monitors = static_qd_to_monitors.get(static_qd_index)
+				#print("USING STATIC QD INDEX %i" % static_qd_index)
 
-				print(monitors)
+				# branch minimal, so if the bind variable is the first,
+				# we always instantiate a new monitor, and if not, there are some checks to do
 
-				if monitors is None or list(set(monitors)) == [None]:
-
-					print("No monitors exist - instantiating new ones")
-					# there is no monitor for this element of the qd - instantiate a new one for every
-					# configuration found for monitors corresponding to the prefix of the binding before bind_variable_index
-
-					# if we're dealing with the first bind variable, there cannot be previous configurations
-					# so in that case just instantiate a new monitor
-					# THIS CODE NEEDS TO BE REFACTORED
-
-					if bind_variable_index == 0:
-
-						print("instantiating new monitor for static qd index %i" % static_qd_index)
-						#new_monitor = formula_tree.new_monitor(If(atom1).then(formula_tree.land(atom2, atom3)))
-						#new_monitor = formula_tree.new_monitor(If(atom1).then(atom2))
-						new_monitor = formula_tree.new_monitor(formula_structure.get_formula_instance())
+				if bind_variable_index == 0:
+					#print("first bind variable - instantiating new monitor for static qd index %i" % static_qd_index)
+					new_monitor = formula_tree.new_monitor(formula_structure.get_formula_instance())
+					#print("new monitor instantiated")
+					try:
+						static_qd_to_monitors[static_qd_index].append(new_monitor)
+						#print("appended new monitor")
+					except:
 						static_qd_to_monitors[static_qd_index] = [new_monitor]
+
+					add_timing_point("instantiated first monitor for static qd index %i" % static_qd_index)
+
+					# update the monitor with the newly observed data
+					#print("processing observation with new monitor")
+					sub_verdict = new_monitor.process_atom_and_value(associated_atom, observed_value)
+					if sub_verdict == True or sub_verdict == False:
+
+						# record the monitor state with the binding
+						if static_bindings_to_monitor_states.get(static_qd_index) is None:
+							static_bindings_to_monitor_states[static_qd_index] = [new_monitor._state]
+						else:
+							static_bindings_to_monitor_states[static_qd_index].append(new_monitor._state)
+						#elif not(new_monitor._state in static_bindings_to_monitor_states[static_qd_index]):
+						#	static_bindings_to_monitor_states[static_qd_index].append(new_monitor._state)
+
+						#pprint(static_bindings_to_monitor_states)
+
+						# set the monitor to None
+						static_qd_to_monitors[static_qd_index][-1] = None
+						#print("TRUE OR FALSE VERDICT REACHED")
+						add_timing_point("verdict reached - monitor deleted")
+						#add_monitor_size_point(static_qd_index, 0, 0, sub_verdict, "new")
+
+						verdict_report.add_verdict(static_qd_index, sub_verdict)
+
+						#print("*****")
+						#print(static_bindings_to_monitor_states)
+						#print("*****")
+					else:
+						#print("NO VERDICT REACHED")
+						add_timing_point("processed observed value '%s' for atom %s" % (observed_value, associated_atom))
+						#add_monitor_size_point(static_qd_index, 0, len(new_monitor.get_unresolved_atoms()), sub_verdict, "new")
+				else:
+					#print("processing bind variable that isn't first")
+					# the bind variable isn't the first, so we have to handle configurations
+					# find the configurations for this static binding
+					configurations = static_bindings_to_monitor_states.get(static_qd_index)
+					if not(configurations):
+						#print("No configurations found")
+						configuration_indices_to_use = []
+					else:
+						# filter out the configurations so we only take one from each timestamp
+						timestamps_taken = []
+						configuration_indices_to_use = []
+						for (n, configuration) in enumerate(configurations):
+							if not(configuration._monitor_instantiation_time in timestamps_taken):
+								configuration_indices_to_use.append(n)
+								timestamps_taken.append(configuration._monitor_instantiation_time)
+
+					#print("Processing %i configurations" % len(configuration_indices_to_use))
+					#for (n, configuration) in enumerate(configurations):
+					for index in configuration_indices_to_use:
+						configuration = static_bindings_to_monitor_states.get(static_qd_index)[index]
+						#print("%i - PROCESSING CONFIGURATION %s" % (index, configuration))
+
+						associated_atom_index = configuration._state.keys().index(associated_atom)
+						associated_atom_key = configuration._state.keys()[associated_atom_index]
+
+						#print("PROCESSING CONFIGURATION %s" % configuration._state)
+
+						#print("instantiating new monitor for static qd index %i" % static_qd_index)
+						new_monitor = formula_tree.new_monitor(formula_structure.get_formula_instance())
+
+						if not(configuration._state.get(associated_atom_key) is None):
+							#print("%i - CONFIGURATION HAS OBSERVED THIS VALUE, SO SETTING UP A NEW MONITOR" % index)
+							# we only keep the new monitor if the configuration already observed the atom
+							# otherwise we're just using a monitor as a way to resolve the truth value
+							# to update the existing configuration without generating a new verdict
+							try:
+								static_qd_to_monitors[static_qd_index].append(new_monitor)
+							except:
+								static_qd_to_monitors[static_qd_index] = [new_monitor]
+						else:
+							#print("%i - CONFIGURATION HASN'T OBSERVED THIS VALUE - SO JUST UPDATING IT WITHOUT MAKING A NEW MONITOR" % index)
+							pass
 
 						add_timing_point("instantiated first monitor for static qd index %i" % static_qd_index)
 
-						# update the monitor with the newly observed data
-						sub_verdict = new_monitor.process_atom_and_value(associated_atom, observed_value)
-						if sub_verdict == True or sub_verdict == False:
+						#print("UPDATING NEW MONITOR WITH CONFIGURATION")
 
-							# record the monitor state with the binding
-							if static_bindings_to_monitor_states.get(static_qd_index) is None:
-								static_bindings_to_monitor_states[static_qd_index] = [new_monitor._state]
-							elif not(new_monitor._state in static_bindings_to_monitor_states[static_qd_index]):
-								static_bindings_to_monitor_states[static_qd_index].append(new_monitor._state)
+						# update the new monitor for this configuration with all the atoms apart from the one we've
+						# just observed
 
-							pprint(static_bindings_to_monitor_states)
-
-							# set the monitor to None
-							static_qd_to_monitors[static_qd_index] = [None]
-							print("TRUE OR FALSE VERDICT REACHED")
-							add_timing_point("verdict reached - monitor deleted")
-							#add_monitor_size_point(static_qd_index, 0, 0, sub_verdict, "new")
-
-							verdict_report.add_verdict(static_qd_index, sub_verdict)
-						else:
-							print("NO VERDICT REACHED")
-							add_timing_point("processed observed value '%s' for atom %s" % (observed_value, associated_atom))
-							#add_monitor_size_point(static_qd_index, 0, len(new_monitor.get_unresolved_atoms()), sub_verdict, "new")
-
-					else:
-
-						stored_bindings = static_bindings_to_monitor_states.keys()
-						# get bindings with matching prefixes
-						relevant_bindings = filter(
-							lambda stored_binding : bindings[stored_binding][0:bind_variable_index-1] ==\
-								bindings[static_qd_index][0:bind_variable_index-1],
-							stored_bindings)
-
-						print("relevant bindings:")
-						pprint(relevant_bindings)
-						print("from:")
-						pprint(stored_bindings)
-
-						# for each of the relevant bindings, find the configurations of atoms for monitors
-						# that have existed for those bindings, and instantiate new monitors, replacing the atom we have now
-
-						configurations = []
-						for relevant_binding in relevant_bindings:
-							configurations += static_bindings_to_monitor_states[relevant_binding]
-
-						print("configurations:", configurations)
-
-						for (n, configuration) in enumerate(configurations):
-
-							configuration = configuration._state
-
-							print("PROCESSING CONFIGURATION %s" % configuration)
-
-							print("instantiating new monitor for static qd index %i" % static_qd_index)
-							#new_monitor = formula_tree.new_monitor(If(atom1).then(formula_tree.land(atom2, atom3)))
-							#new_monitor = formula_tree.new_monitor(If(atom1).then(atom2))
-							new_monitor = formula_tree.new_monitor(formula_structure.get_formula_instance())
-							if n == 0:
-								static_qd_to_monitors[static_qd_index] = [new_monitor]
-							else:
-								static_qd_to_monitors[static_qd_index].append(new_monitor)
-
-							add_timing_point("instantiated first monitor for static qd index %i" % static_qd_index)
-
-							print("UPDATING NEW MONITOR WITH CONFIGURATION")
-
-							# update the new monitor for this configuration with all the atoms apart from the one we've
-							# just observed
-
-							for key in configuration.keys():
-								if not(key == associated_atom) and not(key == formula_tree.lnot(associated_atom)):
-									print("%s IS NOT OBSERVED ATOM %s - UPDATING NEW MONITOR WITH IT" % (key, associated_atom))
-									if configuration[key] == True:
-										new_monitor.check_optimised(key)
-									elif configuration[key] == False:
-										new_monitor.check_optimised(formula_tree.lnot(key))
-									else:
-										# the value is None - it wasn't observed in this configuration
-										pass
+						for key in configuration._state.keys():
+							if not(key == associated_atom) and not(key == formula_tree.lnot(associated_atom)):
+								#print("%s IS NOT OBSERVED ATOM %s - UPDATING NEW MONITOR WITH IT" % (key, associated_atom))
+								if configuration._state[key] == True:
+									new_monitor.check_optimised(key)
+								elif configuration._state[key] == False:
+									new_monitor.check_optimised(formula_tree.lnot(key))
 								else:
-									print("%s IS OBSERVED ATOM %s - NOT USING IT" % (key, associated_atom))
+									# the value is None - it wasn't observed in this configuration
+									pass
+							else:
+								#print("%s IS OBSERVED ATOM %s - NOT USING IT" % (key, associated_atom))
+								pass
 
-							# update the monitor with the newly observed data
+						# update the monitor with the newly observed data
+						#print("updating new monitor with atom %s and observed valued %s" % (associated_atom, observed_value))
+
+						if not(configuration._state.get(associated_atom_key) is None):
 							sub_verdict = new_monitor.process_atom_and_value(associated_atom, observed_value)
+							#print("%i - KEEPING INSTANTIATED MONITOR" % index)
+
+							# we need to copy the instantiation time of the configuration to the monitor's state
+							new_monitor._state._monitor_instantiation_time = configuration._monitor_instantiation_time
+
+							# this configuration has already observed this atom,
+							# so it's from an old monitor and we use it to instantiate a new monitor
 							if sub_verdict == True or sub_verdict == False:
 
 								# record the monitor state with the binding
 								if static_bindings_to_monitor_states.get(static_qd_index) is None:
 									static_bindings_to_monitor_states[static_qd_index] = [new_monitor._state]
-								elif not(new_monitor._state in static_bindings_to_monitor_states[static_qd_index]):
+								else:
 									static_bindings_to_monitor_states[static_qd_index].append(new_monitor._state)
-
-								#pprint(static_bindings_to_monitor_states)
+								#elif not(new_monitor._state in static_bindings_to_monitor_states[static_qd_index]):
+								#	static_bindings_to_monitor_states[static_qd_index].append(new_monitor._state)
 
 								# set the monitor to None
-								static_qd_to_monitors[static_qd_index] = [None]
-								print("TRUE OR FALSE VERDICT REACHED")
+								static_qd_to_monitors[static_qd_index][-1] = None
+								#print("TRUE OR FALSE VERDICT REACHED")
 								add_timing_point("verdict reached - monitor deleted")
 								#add_monitor_size_point(static_qd_index, 0, 0, sub_verdict, "new")
 
 								verdict_report.add_verdict(static_qd_index, sub_verdict)
+
+								#print("*****")
+								#print(static_bindings_to_monitor_states)
+								#print("*****")
+
 							else:
-								print("NO VERDICT REACHED")
+								#print("NO VERDICT REACHED")
 								add_timing_point("processed observed value '%s' for atom %s" % (observed_value, associated_atom))
 								#add_monitor_size_point(static_qd_index, 0, len(new_monitor.get_unresolved_atoms()), sub_verdict, "new")
 
-				else:
-					# there is a monitor:
-					# If the atom is derive from the first binding:
-					# if we're observing the data again - instantiate a new one
-					# if there is already a monitor, it must have observed this data since the only
-					# way for it to exist, for now, is for its instantiation to be triggered
-					# by the execution of this point
-
-					# If the atom is derived from any other bind variable, then just update the monitors
-
-					if bind_variable_index == 0:
-						# first bind variable - we assume for now that this always triggers instantiation
-						# this may need to change later - we'll see
-						print("instantiating new monitor for static qd index %i" % static_qd_index)
-						#new_monitor = formula_tree.new_monitor(If(atom1).then(formula_tree.land(atom2, atom3)))
-						#new_monitor = formula_tree.new_monitor(If(atom1).then(atom2))
-						new_monitor = formula_tree.new_monitor(formula_structure.get_formula_instance())
-						static_qd_to_monitors[static_qd_index].append(new_monitor)
-
-						add_timing_point("instantiated another monitor for static qd index %i" % static_qd_index)
-
-						sub_verdict = new_monitor.process_atom_and_value(associated_atom, observed_value)
-						if sub_verdict == True or sub_verdict == False:
-
-							# record the monitor state with the binding
-							if static_bindings_to_monitor_states.get(static_qd_index) is None:
-								static_bindings_to_monitor_states[static_qd_index] = [new_monitor._state]
-							elif not(new_monitor._state in static_bindings_to_monitor_states[static_qd_index]):
-								static_bindings_to_monitor_states[static_qd_index].append(new_monitor._state)
-
-							#pprint(static_bindings_to_monitor_states)
-
-							# set the monitor to None
-							static_qd_to_monitors[static_qd_index][-1] = None
-							print("TRUE OR FALSE VERDICT REACHED")
-							add_timing_point("verdict reached - monitor deleted")
-							if check_monitor_size:
-								add_monitor_size_point(static_qd_index, len(static_qd_to_monitors[static_qd_index])-1, 0, sub_verdict, "new")
-
-							verdict_report.add_verdict(static_qd_index, sub_verdict)
 						else:
-							print("NO VERDICT REACHED")
-							add_timing_point("processed observed value '%s' for atom %s" % (observed_value, associated_atom))
-							#if check_monitor_size:
-							#	add_monitor_size_point(static_qd_index, len(static_qd_to_monitors[static_qd_index])-1, len(new_monitor.get_unresolved_atoms()), sub_verdict, "new")
+							# this configuration hasn't observed this atom,
+							# so must have been collapsed
+							# so we just update the configuration (without instantiating a new monitor
+							# or generating a new verdict)
+							# when we send the observed value to the monitor, we have to force update since monitors' default behaviour
+							# is to reject new observations if a verdict has already been reached
+							new_monitor.process_atom_and_value(associated_atom, observed_value, force_monitor_update=True)
+							#print("%i - UPDATING EXISTING CONFIGURATION WITH MONITOR STATE %s" % (index, new_monitor._state))
+							static_bindings_to_monitor_states[static_qd_index][index]._state = new_monitor._state._state
+							#print("CONFIGURATION IS NOW %s" % static_bindings_to_monitor_states[static_qd_index][index])
 
-					else:
-						# not the first bind variable
-						# update existing monitors
+					#print("*****")
+					#print(static_bindings_to_monitor_states)
+					#print("*****")
 
-						# this code is copy and pasted below - some refactoring needs to be done.
-
+					# update existing monitors
+					monitors = static_qd_to_monitors.get(static_qd_index)
+					#print(monitors)
+					if not(monitors is None or list(set(monitors)) == [None]):
+						#print("Updating existing %i monitors" % len(monitors))
 						for n in range(len(monitors)):
 							# skip monitors that have reached verdicts
 							if monitors[n] is None:
+								#print("Skipping monitor - it's reached a verdict")
 								continue
 
-							print("updating monitor for static qd index %i" % static_qd_index)
+							#print("updating monitor for static qd index %i" % static_qd_index)
 							sub_verdict = monitors[n].process_atom_and_value(associated_atom, observed_value)
 							if sub_verdict == True or sub_verdict == False:
 
 								# record the monitor state with the binding
 								if static_bindings_to_monitor_states.get(static_qd_index) is None:
 									static_bindings_to_monitor_states[static_qd_index] = [monitors[n]._state]
-								elif not(monitors[n]._state in static_bindings_to_monitor_states[static_qd_index]):
+								else:
 									static_bindings_to_monitor_states[static_qd_index].append(monitors[n]._state)
+								#elif not(new_monitor._state in static_bindings_to_monitor_states[static_qd_index]):
+								#	static_bindings_to_monitor_states[static_qd_index].append(new_monitor._state)
 
 								#pprint(static_bindings_to_monitor_states)
 
 								# set the monitor to None
 								monitors[n] = None
-								print("TRUE OR FALSE VERDICT REACHED")
+								#print("TRUE OR FALSE VERDICT REACHED")
 								add_timing_point("verdict reached - monitor deleted")
 								if check_monitor_size:
 									add_monitor_size_point(static_qd_index, n, 0, sub_verdict, "existing")
 
 								verdict_report.add_verdict(static_qd_index, sub_verdict)
+
+								#print("*****")
+								##print(static_bindings_to_monitor_states)
+								#print("*****")
 							else:
-								print("NO VERDICT REACHED")
+								#print("NO VERDICT REACHED")
 								add_timing_point("processed observed value '%s' for atom %s" % (observed_value, associated_atom))
 								if check_monitor_size:
 									add_monitor_size_point(static_qd_index, n, len(monitors[n].get_unresolved_atoms()), sub_verdict, "existing")
-
-						print("PROCESSING DONE FOR ATOM %s with value %s" % (associated_atom, observed_value))
-
-						print("*****")
-						print(static_bindings_to_monitor_states)
-						print("*****")
+					else:
+						#print("All existing monitors are already collapsed")
+						pass
 
 			else:
 				# this point can't trigger instantiation of a monitor for this element of the static qd
@@ -927,28 +917,34 @@ if __name__ == "__main__":
 						if monitors[n] is None:
 							continue
 
-						print("updating monitor for static qd index %i" % static_qd_index)
+						#print("updating monitor for static qd index %i" % static_qd_index)
 						sub_verdict = monitors[n].process_atom_and_value(associated_atom, observed_value)
 						if sub_verdict == True or sub_verdict == False:
 
 							# record the monitor state with the binding
 							if static_bindings_to_monitor_states.get(static_qd_index) is None:
-								static_bindings_to_monitor_states[static_qd_index] = [monitors[n]._state]
+								static_bindings_to_monitor_states[static_qd_index] = [new_monitor._state]
 							else:
-								static_bindings_to_monitor_states[static_qd_index].append(monitors[n]._state)
+								static_bindings_to_monitor_states[static_qd_index].append(new_monitor._state)
+							#elif not(new_monitor._state in static_bindings_to_monitor_states[static_qd_index]):
+							#	static_bindings_to_monitor_states[static_qd_index].append(new_monitor._state)
 
-							pprint(static_bindings_to_monitor_states)
+							#pprint(static_bindings_to_monitor_states)
 
 							# set the monitor to None
 							monitors[n] = None
-							print("TRUE OR FALSE VERDICT REACHED")
+							#print("TRUE OR FALSE VERDICT REACHED")
 							add_timing_point("verdict reached - monitor deleted")
 							if check_monitor_size:
 								add_monitor_size_point(static_qd_index, n, 0, sub_verdict, "existing")
 
+							#print("*****")
+							#print(static_bindings_to_monitor_states)
+							#print("*****")
+
 							verdict_report.add_verdict(static_qd_index, sub_verdict)
 						else:
-							print("NO VERDICT REACHED")
+							#print("NO VERDICT REACHED")
 							add_timing_point("processed observed value '%s' for atom %s" % (observed_value, associated_atom))
 							if check_monitor_size:
 								add_monitor_size_point(static_qd_index, n, len(monitors[n].get_unresolved_atoms()), sub_verdict, "existing")
@@ -956,9 +952,9 @@ if __name__ == "__main__":
 			# set the task as done
 			queue.task_done()
 
-			print("CONSUMPTION DONE")
+			#print("CONSUMPTION DONE")
 
-			print("="*100)
+			#print("="*100)
 
 			if args.generate_vis_data:
 				# update the time series
@@ -1055,9 +1051,15 @@ if __name__ == "__main__":
 
 		print("]")
 
-		print("gave verdicts %s" % (", ".join(map(str, report_map[bind_space_index]))))
+		#print("gave (%i) verdicts %s" % (len(report_map[bind_space_index]), ", ".join(map(str, report_map[bind_space_index]))))
+		true_verdicts = filter(lambda pair : pair[0] == True, report_map[bind_space_index])
+		false_verdicts = filter(lambda pair : pair[0] == False, report_map[bind_space_index])
+		print("gave %i verdicts, %i true and %i false" % (len(report_map[bind_space_index]), len(true_verdicts), len(false_verdicts)))
 
 		print("")
+
+	for static_binding_index in static_bindings_to_monitor_states.keys():
+		print(static_binding_index, len(static_bindings_to_monitor_states[static_binding_index]))
 
 
 	# now, if the visualiser option has been given, output graphs for each stage of instrumentation

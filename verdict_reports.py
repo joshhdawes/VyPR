@@ -20,6 +20,7 @@ class VerdictReport(object):
 
 	def add_verdict(self, bind_space_index, verdict):
 		self.map_lock.acquire()
+		#print("ADDING VERDICT FOR QD INDEX %i" % bind_space_index)
 		if not(self._bind_space_to_verdicts.get(bind_space_index)):
 			self._bind_space_to_verdicts[bind_space_index] = [(verdict, datetime.datetime.now())]
 		else:
