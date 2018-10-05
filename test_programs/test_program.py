@@ -8,20 +8,20 @@ Author: Joshua Dawes - CERN, University of Manchester - joshua.dawes@cern.ch
 
 def f(n):
 	import time
-	print("f is executing - sleeping for %f seconds" % n)
+	#print("f is executing - sleeping for %f seconds" % n)
 	time.sleep(n)
 
 x = 3
 b = 60
-for i in range(0, 10):
+for i in range(0, cmd_params.runs):
 	a = 75+i
 	for j in range(0, 5):
 		if j < 3:
 			z = 3
 		else:
 			z = 4
-	f(float(i)/100000.0)
-	print("end of iteration of loop")
+	f(0.1)
+	#print("end of iteration of loop")
 
 y = 3
 a = 50
@@ -29,7 +29,7 @@ i = 5
 j = 5
 if a < b:
 	if i == j:
-		for n in range(20):
+		for n in range(50):
 			f(0.2)
 		for n in range(50):
 			f(0.1)
@@ -41,6 +41,6 @@ elif a < b + 20:
 	e = 70
 else:
 	g = 20
-	print("TRAVERSING LAST BRANCH")
+	#print("TRAVERSING LAST BRANCH")
 	f(2)
 d = 30

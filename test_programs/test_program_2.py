@@ -6,8 +6,13 @@ In applying this licence, CERN does not waive the privileges and immunities gran
 Author: Joshua Dawes - CERN, University of Manchester - joshua.dawes@cern.ch
 """
 
+def f(n):
+	import time
+	#print("f is executing - sleeping for %f seconds" % n)
+	time.sleep(n)
+
 a = 10
-for i in range(30):
+for i in range(10):
 	if i < 3:
 		f(0.1)
 	else:
