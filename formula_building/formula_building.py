@@ -1,6 +1,3 @@
-from __future__ import print_function
-def print(*args, **kwards):
-	pass
 """
 (C) Copyright 2018 CERN and University of Manchester.
 This software is distributed under the terms of the GNU General Public Licence version 3 (GPL Version 3), copied verbatim in the file "COPYING".
@@ -47,18 +44,15 @@ class Forall(object):
 	a sequence of quantifiers.
 	This class should always hold the current quantification structure.
 	"""
-	def __init__(self, bind_variable, is_first=True, bind_variables=None):
+	def __init__(self, is_first=True, bind_variables=None, **bind_variable):
 		"""
 		Given a bind variable (bind_variable_name is the variable name,
 		and bind_variable_value is either StaticState or StaticTransition),
 		check that, if is_first is true, the bind variable is independent.
 		"""
 
-		if is_first and not(bind_variable._required_binding is None):
-			raise Exception("First bind variable in list must be independent.")
-
-		if not(is_first) and bind_variable._required_binding is None:
-			raise Exception("Only the first bind variable can be independent.")
+		bind_variable_name = bind_variable.keys()[0]
+		bind_variable_obj = bind_variable.values()[0]
 
 		self.bind_variables = bind_variables
 
@@ -68,12 +62,13 @@ class Forall(object):
 		to reference the actual bind variable value in the bind_variables dictionary
 		"""
 		if not(is_first):
-			bind_variable._required_binding = self.bind_variables[bind_variable._required_binding]
+			bind_variable_obj._required_binding = self.bind_variables[bind_variable_obj._required_binding]
 
+		bind_variable_final = bind_variable_obj.complete_instantiation(bind_variable_name)
 		if self.bind_variables is None:
-			self.bind_variables = OrderedDict({bind_variable._bind_variable_name : bind_variable})
+			self.bind_variables = OrderedDict({bind_variable_name : bind_variable_final})
 		else:
-			self.bind_variables.update({bind_variable._bind_variable_name : bind_variable})
+			self.bind_variables.update({bind_variable_name : bind_variable_final})
 
 		self._bind_variables = self.bind_variables.values()
 
@@ -86,12 +81,16 @@ class Forall(object):
 		else:
 			return "Forall(%s).Formula(%s)" % (self.bind_variables, self.get_formula_instance())
 
-	def Forall(self, bind_variable):
+	def Forall(self, **bind_variable):
 		# return an instance 
-		return Forall(bind_variable, is_first=False, bind_variables=self.bind_variables)
+		return Forall(is_first=False, bind_variables=self.bind_variables, **bind_variable)
 
 	def get(self, key):
 		return self.bind_variables[key]
+
+	# syntactic sugar
+	def Check(self, formula_lambda):
+		return self.Formula(formula_lambda)
 
 	def Formula(self, formula_lambda):
 		"""
@@ -111,6 +110,31 @@ class Forall(object):
 		argument_names = inspect.getargspec(self._formula).args
 		bind_variables = map(lambda arg_name : self.bind_variables[arg_name], argument_names)
 		return self._formula(*bind_variables)
+
+class changes(object):
+	"""
+	Syntactic sugar for specifications.
+	"""
+
+	def __init__(self, name_changed, after=None):
+		self._name = None
+		self._name_changed = name_changed
+		self._required_binding = after
+
+	def complete_instantiation(self, bind_variable_name):
+		return StaticState(bind_variable_name, self._name_changed, self._required_binding)
+
+class calls(object):
+	"""
+	Syntactic sugar for specifications.
+	"""
+
+	def __init__(self, operates_on, after=None):
+		self._operates_on = operates_on
+		self._required_binding = after
+
+	def complete_instantiation(self, bind_variable_name):
+		return StaticTransition(bind_variable_name, self._operates_on, self._required_binding)
 
 class StaticState(object):
 	"""
@@ -137,6 +161,9 @@ class StaticState(object):
 
 	def length(self):
 		return formula_tree.StateValueLength(self)
+
+	def next_call(self, function):
+		return NextStaticTransition(self, function)
 
 	def _next_transition(self, operates_on):
 		return NextStaticTransition(self, operates_on)
@@ -228,29 +255,6 @@ class Duration(object):
 		else:
 			raise Exception("Duration predicate wasn't defined properly.")
 
-class RuntimeState(object):
-	"""
-	Models a state obtained by observing data at runtime.
-	"""
-
-	def __init__(self, binding):
-		self._binding = binding
-
-	def __repr__(self):
-		return "RuntimeState(_binding=%s)" % self._binding
-
-class RuntimeTransition(object):
-	"""
-	Models a transition observed by observing data at runtime.
-	"""
-
-	def __init__(self, operates_on, duration):
-		self._operates_on = operates_on
-		self._duration = duration
-
-	def __repr__(self):
-		return "RuntimeTransition(_operates_on=%s, _duration=%s)" % (self._operates_on, self._duration)
-
 def derive_composition_sequence(atom):
 	"""
 	Given an atom, derive the sequence of operator compositions.
@@ -272,108 +276,3 @@ def derive_composition_sequence(atom):
 	# add the input bind variable to the composition sequence
 	sequence.append(current_operator)
 	return sequence
-
-if __name__ == "__main__":
-	# s models the binding from a qd
-	q = StaticState('q')
-	#t = StaticTransition('t', 'f')
-	#t = BindingTransition('s0', 's1', 'f')
-
-	atom1 = q('x')._in([0, 10])
-	atom3 = q._next_transition('f')._next_transition('g').duration()._in([0, 5])
-	#atom1 = t.duration()._in([0, 8])
-
-	print("composition sequence of atom %s is %s" % (atom1, derive_composition_sequence(atom1)))
-	print("composition sequence of atom %s is %s" % (atom3, derive_composition_sequence(atom3)))
-
-	# maps from atoms to the states observed during runtime relevant to them
-	runtime_state1 = RuntimeState({'x' : 12, 'y' : 5})
-	runtime_transition1 = RuntimeTransition('g', 8)
-	binding1 = {
-		atom1 : runtime_state1,
-		atom3 : runtime_transition1
-	}
-	runtime_state2 = RuntimeState({'x' : 8, 'y' : 5})
-	runtime_transition2 = RuntimeTransition('g', 3)
-	binding2 = {
-		atom1 : runtime_state2,
-		atom3 : runtime_transition2
-	}
-	#binding2 = {'q' : RuntimeState('s2', {'x' : 4, 'y' : 8})}
-	#binding1 = {t : RuntimeTransition('s0', 's1', 'f', 5)}
-	
-	# construct a dummy qd
-	bindings = [binding1, binding2]
-
-	# iterate through the bindings
-	for binding in bindings:
-		print("="*50)
-		print("Verifying for binding %s" % binding)
-		print("="*50)
-
-		# construct the formula again (since it will have been collapsed)
-		formula = If(atom1).then(atom3)
-		#formula = atom1._and()
-		#formula = t.duration()._in([0, 10])._and()
-		# get its alphabet
-		formula_alphabet = formula_tree.get_formula_alphabet(formula)
-
-		# construct a new monitor for this binding
-		monitor = formula_tree.new_monitor(formula)
-
-		print(monitor)
-
-		# find which symbols in the formula are made true by
-		# the current binding in the system D
-
-		for symbol in formula_alphabet:
-			print("-"*50)
-			print("checking symbol %s" % symbol)
-			print("-"*50)
-
-			print(binding.keys())
-
-			if symbol in binding.keys():
-				key_index = binding.keys().index(symbol)
-			else:
-				key_index = binding.keys().index(formula_tree.lnot(symbol))
-
-			atom = binding.keys()[key_index]
-
-			relevant_object = binding[atom]
-
-			print(atom, relevant_object)
-
-			if type(relevant_object) is RuntimeState:
-				if atom._interval[0] <= relevant_object._binding[atom._name] <= atom._interval[1]:
-					if formula_tree.atom_is_positive(symbol):
-						print("object %s makes atom %s true" % (relevant_object, atom))
-						result = monitor.check_optimised(atom)
-					else:
-						print("object %s makes atom %s false" % (relevant_object, formula_tree.lnot(atom)))
-						result = monitor.check_optimised(atom)
-				else:
-					if formula_tree.atom_is_positive(symbol):
-						print("object %s makes atom %s true" % (relevant_object, formula_tree.lnot(atom)))
-						result = monitor.check_optimised(formula_tree.lnot(atom))
-					else:
-						print("object %s makes atom %s false" % (relevant_object, atom))
-						result = monitor.check_optimised(formula_tree.lnot(atom))
-			if type(relevant_object) is RuntimeTransition:
-				if atom._interval[0] <= relevant_object._duration <= atom._interval[1]:
-					if formula_tree.atom_is_positive(symbol):
-						print("object %s makes atom %s true" % (relevant_object, atom))
-						result = monitor.check_optimised(atom)
-					else:
-						print("object %s makes atom %s false" % (relevant_object, formula_tree.lnot(atom)))
-						result = monitor.check_optimised(atom)
-				else:
-					if formula_tree.atom_is_positive(symbol):
-						print("object %s makes atom %s true" % (relevant_object, formula_tree.lnot(atom)))
-						result = monitor.check_optimised(formula_tree.lnot(atom))
-					else:
-						print("object %s makes atom %s false" % (relevant_object, atom))
-						result = monitor.check_optimised(formula_tree.lnot(atom))
-
-		print("="*50)
-		print(monitor)

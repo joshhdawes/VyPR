@@ -1,6 +1,3 @@
-from __future__ import print_function
-def print(*args, **kwards):
-	pass
 """
 (C) Copyright 2018 CERN and University of Manchester.
 This software is distributed under the terms of the GNU General Public Licence version 3 (GPL Version 3), copied verbatim in the file "COPYING".
@@ -31,29 +28,6 @@ from monitor_synthesis import formula_tree
 from formula_building.formula_building import *
 
 vertices = []
-
-"""def get_call_name_string_reversed(obj):
-	Given an ast.Call object in call, recursively find the string representing the function called.
-	If the call is simply a function, then this is straightforward.
-	If the call is to a method, resolving it is slightly trickier.
-
-	if type(obj) is ast.Str:
-		return [obj.s]
-	if type(obj) is ast.Name:
-		return [obj.id]
-	elif type(obj) is ast.Attribute:
-		return [obj.attr] + get_call_name_string_reversed(obj.value)
-	elif type(obj) is ast.Call:
-		if type(obj.func) is ast.Attribute:
-			return [obj.func.attr] + get_call_name_string_reversed(obj.func.value)
-		elif type(obj.func) is ast.Subscript:
-			return get_call_name_string_reversed(obj.func.value)
-		elif type(obj.func) is ast.Name:
-			return get_call_name_string_reversed(obj.func)
-
-def get_call_name_string(obj):
-	#print(obj.func)
-	return ".".join(get_call_name_string_reversed(obj)[::-1])"""
 
 def get_call_name_strings(obj):
 	chain = list(ast.walk(obj))
@@ -132,8 +106,6 @@ class CFGVertex(object):
 		self.edges.append(edge)
 
 	def __repr__(self):
-		#return "%s=> %s" % (self._name_changed, self.edges)
-		#return "<Vertex changing names %s %i on line %i>" % (self._name_changed, id(self._name_changed), self._previous_edge._instruction.lineno)
 		return "<Vertex changing names %s %i>" % (self._name_changed, id(self._name_changed))
 
 class CFGEdge(object):
@@ -189,10 +161,6 @@ class CFG(object):
 		"""
 		current_vertices = starting_vertices if not(starting_vertices is None) else [self.starting_vertices]
 
-		print("starting vertices %s" % starting_vertices)
-
-		print("processing block", block)
-
 		for (n, entry) in enumerate(block):
 			if type(entry) is ast.Assign or (type(entry) is ast.Expr and type(entry.value) is ast.Call):
 
@@ -247,8 +215,6 @@ class CFG(object):
 
 				self.return_statements.append(new_vertex)
 
-				print("return statements are %s" % self.return_statements)
-
 			elif type(entry) is ast.Raise:
 
 				condition_to_use = condition if n == 0 else []
@@ -301,10 +267,6 @@ class CFG(object):
 				# compute a list of pairs (condition, block) derived from the conditional
 				pairs = [([entry.test], entry.body)]
 
-				# need to accumulate conditions at some point
-
-				#print(entry.orelse[0].orelse[0].__dict__)
-
 				current_condition_set = [formula_tree.lnot(entry.test)]
 
 				current_conditional = [entry]
@@ -322,8 +284,6 @@ class CFG(object):
 					else:
 						# nowhere else to go in the traversal
 						break
-
-				print(pairs)
 
 				# add the branches to the graph
 				final_conditional_vertices = []
@@ -394,8 +354,6 @@ class CFG(object):
 				# process loop body
 				final_vertices = self.process_block(entry.body, current_vertices, ['for'])
 
-				print("final vertex in loop", current_vertices[0].edges[0]._target_state)
-
 				# add 2 edges from the final_vertex - one going back to the pre-loop vertex
 				# with the positive condition, and one going to the post loop vertex.
 
@@ -417,8 +375,6 @@ class CFG(object):
 
 				final_vertices = self.process_block(entry.body, current_vertices, ['while'])
 
-				print("final vertex in loop", current_vertices[0].edges[0]._target_state)
-
 				for final_vertex in final_vertices:
 					for base_vertex in current_vertices:
 						new_positive_edge = CFGEdge('for', 'loop-jump')
@@ -428,18 +384,13 @@ class CFG(object):
 
 				current_vertices = final_vertices
 
-
-		print("finished processing block")
-
 		return current_vertices
 
 	def next_calls(self, vertex, function, calls=[], marked_vertices=[]):
 		"""
 		Given a point (vertex or edge), find the set of next edges that model calls to function.
 		"""
-		print("marked vertices are %s" % marked_vertices)
 		if not(vertex in marked_vertices):
-			print("vertex %s not visited" % vertex)
 			marked_vertices.append(vertex)
 			edges = vertex.edges
 			for edge in edges:
@@ -449,15 +400,13 @@ class CFG(object):
 					or
 					(type(edge._instruction) is ast.Assign
 					and type(edge._instruction.value) is ast.Call and function in get_call_name_strings(edge._instruction.value))):
-					print("edge calling %s is counted" % get_call_name_strings(edge._instruction.value))
 					calls.append(edge)
 				else:
 					# this edge is not what we're looking for
 					# so traverse this branch further
-					print("recursing on vertex that changes %s" % edge._target_state._name_changed)
 					self.next_calls(edge._target_state, function, calls, marked_vertices)
 		else:
-			print("vertex %s already visited" % vertex)
+			pass
 
 def expression_as_string(expression):
 	if type(expression) is ast.Num:

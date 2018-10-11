@@ -43,4 +43,3 @@ else:
 	g = 20
 	#print("TRAVERSING LAST BRANCH")
 	f(2)
-d = 30

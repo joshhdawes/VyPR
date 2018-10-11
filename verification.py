@@ -12,11 +12,9 @@ import ast
 from datetime import datetime
 from pprint import pprint
 from threading import Lock
-
 import sqlite3
 import json
 
-# import output functions
 from control_flow_graph.construction import *
 from verdict_reports import VerdictReport
 
@@ -118,16 +116,10 @@ def compute_binding_space(quantifier_sequence, scfg, reachability_map, current_b
 			)
 			qd = map(lambda symbolic_state : symbolic_state._previous_edge, relevant_target_vertices)
 
-		print("computed independent qd: %s" % qd)
-		# for now don't handle transitions
-		"""elif type(quantifier_sequence._bind_variables[0]) is StaticTransition:
-			operated_on = quantifier_sequence._bind_variables[0]._operates_on"""
 		binding_space = []
 		# recurse with (possibly partial) bindings
 		for element in qd:
 			binding_space += compute_binding_space(quantifier_sequence, scfg, reachability_map, [element])
-
-		print("computed whole binding space")
 		return binding_space
 	elif len(current_binding) < len(quantifier_sequence._bind_variables):
 		# we have a partial binding
@@ -140,9 +132,8 @@ def compute_binding_space(quantifier_sequence, scfg, reachability_map, current_b
 		current_binding_value = current_binding[index_in_quantifier_sequence]
 		# use the type of the qd we need to traverse the scfg from this point
 		if type(next_quantifier) is StaticState:
-			print("computing unbounded future states according to %s" % next_quantifier)
+			pass
 		elif type(next_quantifier) is StaticTransition:
-			print("computing unbounded future transitions according to %s using binding %s" % (next_quantifier, current_binding))
 			# only works for vertex inputs
 			# this has to cater for edges that are both assignments and function calls (assignments of function call return values)
 			qd = filter(lambda edge : hasattr(edge, "_operates_on") and \
@@ -223,8 +214,6 @@ if __name__ == "__main__":
 	db = args.db
 	check_monitor_size = args.check_monitor
 
-	print("MONITOR CHECKING: %s" % str(check_monitor_size))
-
 	# read in a sample program
 	try:
 		code = "".join(open(args.program[0], "r").readlines())
@@ -258,16 +247,10 @@ if __name__ == "__main__":
 
 	new_scfg = CFG()
 
-	print("="*100)
-	print("CONSTRUCTING SCFG")
-	print("="*100)
+	print("Constructing Symbolic Control Flow Graph for instrumentation")
 	final_vertices = new_scfg.process_block(top_level_block)
-	print("="*100)
-
-	#add_timing_point("constructed cfg")
 
 	# put the graph into a dot file
-	#output_file = "control_flow_graph/cfg.gv"
 	if args.graph:
 		output_file = args.graph[0]
 		graph = Digraph()
@@ -282,23 +265,10 @@ if __name__ == "__main__":
 					"%s : %s" % (str(edge._condition), instruction_to_string(edge._instruction))
 				)
 		graph.render(output_file)
-		print("Writing SCFG to file '%s'." % output_file)
+		print("Written SCFG to dot file '%s'." % output_file)
 	else:
 		print("No file given to write SCFG to - not writing one.")
 
-	print("="*100)
-
-	#pprint(reachability_map)
-
-	# set up a sample QD, find the edges or vertices that correspond to its elements in the CFG
-	# the QD for now is the set of all states that modify a.
-
-	# REMEMBER: in instrumentation, use the name referred to in the atom to decide which value to record
-	# Note: this qd is static, hence does not represent all runtime states if there are loops
-	# in the program.
-	#static_qd = filter(lambda vertex : vertex._name_changed == "a", new_scfg.vertices)
-
-	#add_timing_point("constructed static qd")
 	# this map will send qd element indices to maps from
 	# bind variable indices to the sequence of points in the program
 	# that are needed to evaluate the formula for that element in the qd,
@@ -306,35 +276,23 @@ if __name__ == "__main__":
 	static_qd_to_point_map = {}
 
 	# define a formula
+	print("Getting PyCFTL specification...")
 	formula_structure = import_property_definition(args.property)
-
-	print(formula_structure._formula_atoms)
-
-	print(formula_structure)
-
-	#add_timing_point("set up formula")
+	print("PyCFTL specification is %s" % formula_structure)
 
 	atoms = formula_structure._formula_atoms
 
 	# for each element in the static QD, compute the states/transitions
 	# needed to determine the truth values of the atoms
 
-	print("="*100)
-	print("INSTRUMENTING INPUT PROGRAM")
-	print("="*100)
+	print("Performing instrumentation...")
 
 	# from the sequence of quantifiers, compute the static space of bindings.
+	print("Constructing binding space from quantification...")
 	reachability_map = construct_reachability_map(new_scfg)
 	bindings = compute_binding_space(formula_structure, new_scfg, reachability_map)
 
-	print("Finished computing static space of bindings.")
-	print("Space has %i bindings." % len(bindings))
-
-	"""for binding in bindings:
-		call = binding[1]._instruction
-		print(binding[0].edges, call.value.args[0].n)"""
-
-	print("bindings", bindings)
+	print("Finished computing binding space containing %i bindings" % len(bindings))
 
 	"""
 	This loop will remain roughly the same, except where each element
@@ -352,41 +310,25 @@ if __name__ == "__main__":
 	for a binding.
 	"""
 
-	#for (m, element) in enumerate(static_qd):
 	for (m, element) in enumerate(bindings):
-		#print("starting from vertex changing %s" % element._name_changed)
-		#element_instrumentation_points = []
-
-		print("PROCESSING BINDING %s" % element)
 		element_types = []
-
-		#add_timing_point("beginning processing for qd element %i" % m)
 
 		static_qd_to_point_map[m] = {}
 
 		for atom in atoms:
 
-			#add_timing_point("beginning processing for atom %s" % atom)
-
 			composition_sequence = derive_composition_sequence(atom)
 
 			input_bind_variable = composition_sequence[-1]
 
-			print("atom %s has input bind variable %s" % (atom, input_bind_variable))
-
 			position_in_quant_sequence = formula_structure._bind_variables.index(input_bind_variable)
 			value_from_binding = element[position_in_quant_sequence]
 
-			print("using value %s from index %i of binding %s" %\
-				(value_from_binding, position_in_quant_sequence, element))
-
-			#add_timing_point("derived composition sequence")
 			# the first element tells us how to instrument (variable value, function call duration, etc)
 			# the final element tells us the bind variable to navigate from
 			# the intermediate elements tell us what to look for in the control flow graph, starting from
 			# the bind variable
 			moves = list(reversed(composition_sequence[1:-1]))
-			print("atom and moves: ", atom, moves)
 
 			# iterate through the moves we have to make,
 			# using the type of the operator used in the move to compute the points we have to instrument
@@ -402,19 +344,12 @@ if __name__ == "__main__":
 			"""
 			for move in moves:
 				if type(move) is NextStaticTransition:
-					print("computing next transitions operating on %s from %s for %s" % (move._operates_on, move._centre, move))
 					calls = []
 					if type(value_from_binding) is CFGVertex:
 						new_scfg.next_calls(value_from_binding, move._operates_on, calls, marked_vertices=[])
 					elif type(value_from_binding) is CFGEdge:
 						new_scfg.next_calls(value_from_binding._target_state, move._operates_on, calls, marked_vertices=[])
-					print("next calls to %s are " % move._operates_on, calls)
 					instrumentation_points = calls
-
-			#instrumentation_points += instrumentation_points
-			#atoms += [atom] * len(instrumentation_points)
-
-			#add_timing_point("derived instrumentation points based on atoms")
 
 			# add the pair consisting of the instrumentation points and the original atom
 			#  to the point in the map identified by (static binding, index in static binding)
@@ -424,12 +359,6 @@ if __name__ == "__main__":
 				static_qd_to_point_map[m][position_in_quant_sequence] = [(instrumentation_points, atom)]
 
 			static_qd_to_point_map[m][position_in_quant_sequence].append(([value_from_binding], "trigger"))
-
-		"""# store the map from the current static qd index,
-		# to all of the points that must be instrumented
-		static_qd_to_point_map[m] = element_instrumentation_points"""
-
-		#add_timing_point("beginning instrumentation")
 
 		# now, perform the instrumentation
 		# iterate through the bind variables - for each bind variable, instrument its points.
@@ -441,7 +370,6 @@ if __name__ == "__main__":
 
 				if atom == "trigger":
 					# we must instrument this as a trigger point
-					print("instrumenting a trigger point")
 					point = points[0]
 
 					# this instrument only needs to reset the minimality flag for the correct partition set
@@ -465,9 +393,6 @@ if __name__ == "__main__":
 
 					for (n, point) in enumerate(points):
 						if type(atom) is formula_tree.TransitionDurationInInterval:
-							print("instrumenting call to measure duration")
-							print("instrumenting instrumentation point %s on line %i" % (point, point._instruction.lineno))
-
 
 							timer_start_statement = "__timer_s = datetime.datetime.now()"
 							timer_end_statement = "__timer_e = datetime.datetime.now()"
@@ -476,17 +401,10 @@ if __name__ == "__main__":
 							time_difference_statement = ("__duration = __timer_e - __timer_s; queue.put((%i, %i, %i, %i, __duration, %i, %i));") %\
 								(m, bind_variable_index, atom_index, n, atoms.index(atom), point._instruction.lineno)#, m, bind_variable_index)
 
-							# timing instruction - helps with performance analysis
-							#timing_point_statement = "#add_timing_point('instrumented instruction on line %i')" % point._instruction.lineno
-
 							start_ast = ast.parse(timer_start_statement).body[0]
 							end_ast = ast.parse(timer_end_statement).body[0]
 							difference_ast = ast.parse(time_difference_statement).body[0]
 							queue_ast = ast.parse(time_difference_statement).body[1]
-							#print_ast = ast.parse(time_difference_statement).body[2]
-							#timing_point_ast = ast.parse(timing_point_statement).body[0]
-
-							#add_timing_point("constructed asts for transition duration instrument")
 
 							start_ast.lineno = point._instruction.lineno
 							start_ast.col_offset = point._instruction.col_offset
@@ -495,35 +413,17 @@ if __name__ == "__main__":
 							difference_ast.lineno = point._instruction.lineno
 							difference_ast.col_offset = point._instruction.col_offset
 
-							#print_ast.lineno = point._instruction.lineno
-							#print_ast.col_offset = point._instruction.col_offset
-
 							queue_ast.lineno = point._instruction.lineno
 							queue_ast.col_offset = point._instruction.col_offset
-							#timing_point_ast.lineno = point._instruction.lineno
-							#timing_point_ast.col_offset = point._instruction.col_offset
-
-							#ast.increment_lineno(point._instruction, n=2)
 
 							index_in_block = point._instruction._parent_body.index(point._instruction)
 
-							# instruments are added in reverse order
-							#point._instruction._parent_body.insert(index_in_block+1, timing_point_ast)
-							#point._instruction._parent_body.insert(index_in_block+1, print_ast)
 							point._instruction._parent_body.insert(index_in_block+1, queue_ast)
 							point._instruction._parent_body.insert(index_in_block+1, difference_ast)
 							point._instruction._parent_body.insert(index_in_block+1, end_ast)
 							point._instruction._parent_body.insert(index_in_block, start_ast)
 
-							#add_timing_point("modified program with transition duration instrument")
-
-							print("PARENT BODY")
-							print(point._instruction._parent_body)
-
 						elif type(atom) is formula_tree.StateValueInInterval:
-							print("instrumenting state changes")
-							#print(point._previous_edge._instruction)
-							#print("instrumenting instrumentation point %s on line %i" % (point, point._previous_edge._instruction.lineno))
 
 							# we are instrumenting a state, so store the value used in that state
 							# in a new variable by accessing the existing variable
@@ -538,15 +438,8 @@ if __name__ == "__main__":
 							record_state = "record_state_%s = %s; queue.put((%i, %i, %i, %i, {'%s' : record_state_%s}, %i, %i));" %\
 								(atom._name, atom._name, m, bind_variable_index, atom_index, n, atom._name, atom._name, atoms.index(atom), incident_edge._instruction.lineno)
 
-							# timing instruction - helps with performance analysis
-							#timing_point_statement = "#add_timing_point('instrumented state change on line %i')" % incident_edge._instruction.lineno
-
 							record_state_ast = ast.parse(record_state).body[0]
 							queue_ast = ast.parse(record_state).body[1]
-							#timing_point_ast = ast.parse(timing_point_statement).body[0]
-
-							#timing_point_ast.lineno = incident_edge._instruction.lineno
-							#timing_point_ast.col_offset = incident_edge._instruction.col_offset
 
 							record_state_ast.lineno = incident_edge._instruction.lineno
 							record_state_ast.col_offset = incident_edge._instruction.col_offset
@@ -554,27 +447,21 @@ if __name__ == "__main__":
 							queue_ast.lineno = incident_edge._instruction.lineno
 							queue_ast.col_offset = incident_edge._instruction.col_offset
 
-							#add_timing_point("constructed ast for state instrument")
-
 							index_in_block = parent_block.index(incident_edge._instruction)
 							parent_block.insert(index_in_block+1, queue_ast)
 							parent_block.insert(index_in_block+1, record_state_ast)
-							#parent_block.insert(index_in_block+2, timing_point_ast)
 
-							#add_timing_point("modified program with state instrument")
+	print("Instrumentation complete")
 
 	def program_thread_f(new_code_obj, cmd_params):
 
 		print("EXECUTING INSTRUMENTED CODE")
 		print("="*50)
-		#add_timing_point("starting instrumented code inside thread")
 		exec(new_code_obj)
 		print("="*50)
 		print("ENDING EXECUTION OF INSTRUMENTED CODE")
 
 		queue.put("end")
-
-		print("EXECUTION END SIGNAL SENT")
 
 	def consumer_thread_f():
 		"""
@@ -600,19 +487,11 @@ if __name__ == "__main__":
 				continue
 
 			if top_pair == "end":
-				print("end instrument processed")
 				# end signal from the monitored program terminating
 				# we set can_top to True to allow anything still in the queue to be processed
 				can_stop = True
 				queue.task_done()
 				continue
-
-			#print("="*100)
-
-			#print("CONSUMING ", top_pair)
-			#print("queue is now %s" % str(queue.queue))
-
-			#add_timing_point("beginning consumption of tuple %s" % str(top_pair))
 
 			# left element of the pair is the index in the static qd
 			# right element is the index of the instrumentation point
@@ -631,8 +510,6 @@ if __name__ == "__main__":
 				if static_bindings_to_trigger_points[static_qd_index].get(bind_variable_index):
 					static_bindings_to_trigger_points[static_qd_index][bind_variable_index] = None
 
-				#print("Set partition set trigger for static qd %i and bind variable index %i to None" % (static_qd_index, bind_variable_index))
-
 				# continue onto the next iteration of the consumption loop
 				# trigger instrumentation points don't contribute to the monitor state
 				queue.task_done()
@@ -642,12 +519,8 @@ if __name__ == "__main__":
 			bind_variable_index = top_pair[1]
 			atom_index = top_pair[2]
 			instrumentation_set_index = top_pair[3]
-			observed_value = top_pair[4]# this may be redundant now
+			observed_value = top_pair[4]
 			associated_atom = atoms[top_pair[5]]
-
-
-			# use the atom with the observed value and the object in the static cfg to decide
-			# on the value of the atom and update the corresponding monitor
 
 			# NOTE: THIS ASSUMES THAT EACH INSTRUMENT IS FOR ONE BINDING - THIS WILL PROBABLY
 			# CHANGE AT SOME POINT SINCE THERE IS INTERSECTION IN INSTRUMENTATION SETS
@@ -662,21 +535,6 @@ if __name__ == "__main__":
 			# output a graph with the instrumentation point highlighted
 			if args.generate_vis_data:
 				output_graph_with_highlight(instrumentation_point)
-
-			#print(instrumentation_point, static_qd_index)
-
-			# for now, instruments point to single qd bindings so no need to compute a set
-			# of valid binding indices
-
-			#pprint(static_qd_to_point_map[static_qd_index][bind_variable_index])
-
-			# get all the instrumentation points associated with bind_variable_index
-			"""relevant_instrumentation_points = []
-			for pair in static_qd_to_point_map[static_qd_index][bind_variable_index]:
-				relevant_instrumentation_points += pair[0]"""
-
-			##print("relevant instrumentation points", relevant_instrumentation_points)
-			#print("instrumentation point received from", instrumentation_point)
 
 			# decide what instrumentation_point can trigger (monitor update, new monitor, or nothing at all)
 			# for now the criteria is whether it is the first element in the list
@@ -700,29 +558,19 @@ if __name__ == "__main__":
 				static_bindings_to_trigger_points[static_qd_index] = {}
 				static_bindings_to_trigger_points[static_qd_index][bind_variable_index] = instrumentation_point
 
-			#print("BRANCH MINIMAL:", branch_minimal)
-
-			#if relevant_instrumentation_points[0] == instrumentation_point:
 			if branch_minimal:
-				#print("USING STATIC QD INDEX %i" % static_qd_index)
 
 				# branch minimal, so if the bind variable is the first,
 				# we always instantiate a new monitor, and if not, there are some checks to do
 
 				if bind_variable_index == 0:
-					#print("first bind variable - instantiating new monitor for static qd index %i" % static_qd_index)
 					new_monitor = formula_tree.new_monitor(formula_structure.get_formula_instance())
-					#print("new monitor instantiated")
 					try:
 						static_qd_to_monitors[static_qd_index].append(new_monitor)
-						#print("appended new monitor")
 					except:
 						static_qd_to_monitors[static_qd_index] = [new_monitor]
 
-					#add_timing_point("instantiated first monitor for static qd index %i" % static_qd_index)
-
 					# update the monitor with the newly observed data
-					#print("processing observation with new monitor")
 					sub_verdict = new_monitor.process_atom_and_value(associated_atom, observed_value)
 					if sub_verdict == True or sub_verdict == False:
 
@@ -734,45 +582,27 @@ if __name__ == "__main__":
 							static_bindings_to_monitor_states[static_qd_index][str(new_monitor._state._monitor_instantiation_time)] = new_monitor._state
 						# an else clause isn't needed here - I think it's impossible for the first bind variable to duplicate a timestamp...
 
-						#pprint(static_bindings_to_monitor_states)
-
 						# set the monitor to None
 						static_qd_to_monitors[static_qd_index][-1] = None
 						del new_monitor
-						#print("TRUE OR FALSE VERDICT REACHED")
-						#add_timing_point("verdict reached - monitor deleted")
-						#add_monitor_size_point(static_qd_index, 0, 0, sub_verdict, "new")
 
 						verdict_report.add_verdict(static_qd_index, sub_verdict)
-
-						#print("*****")
-						#print(static_bindings_to_monitor_states)
-						#print("*****")
 					else:
 						pass
-						#print("NO VERDICT REACHED")
-						#add_timing_point("processed observed value '%s' for atom %s" % (observed_value, associated_atom))
-						#add_monitor_size_point(static_qd_index, 0, len(new_monitor.get_unresolved_atoms()), sub_verdict, "new")
 				else:
 
 					if static_bindings_to_monitor_states.get(static_qd_index):
 
-						#print("Processing %i configurations" % len(configuration_indices_to_use))
 						for timestamp in static_bindings_to_monitor_states.get(static_qd_index).keys():
 
 							configuration = static_bindings_to_monitor_states.get(static_qd_index)[timestamp]
-							#print("%i - PROCESSING CONFIGURATION %s" % (index, configuration))
 
 							associated_atom_index = configuration._state.keys().index(associated_atom)
 							associated_atom_key = configuration._state.keys()[associated_atom_index]
 
-							#print("PROCESSING CONFIGURATION %s" % configuration._state)
-
-							#print("instantiating new monitor for static qd index %i" % static_qd_index)
 							new_monitor = formula_tree.new_monitor(formula_structure.get_formula_instance())
 
 							if not(configuration._state.get(associated_atom_key) is None):
-								#print("%i - CONFIGURATION HAS OBSERVED THIS VALUE, SO SETTING UP A NEW MONITOR" % index)
 								# we only keep the new monitor if the configuration already observed the atom
 								# otherwise we're just using a monitor as a way to resolve the truth value
 								# to update the existing configuration without generating a new verdict
@@ -781,19 +611,13 @@ if __name__ == "__main__":
 								except:
 									static_qd_to_monitors[static_qd_index] = [new_monitor]
 							else:
-								#print("%i - CONFIGURATION HASN'T OBSERVED THIS VALUE - SO JUST UPDATING IT WITHOUT MAKING A NEW MONITOR" % index)
 								pass
-
-							#add_timing_point("instantiated first monitor for static qd index %i" % static_qd_index)
-
-							#print("UPDATING NEW MONITOR WITH CONFIGURATION")
 
 							# update the new monitor for this configuration with all the atoms apart from the one we've
 							# just observed
 
 							for key in configuration._state.keys():
 								if not(key == associated_atom) and not(key == formula_tree.lnot(associated_atom)):
-									#print("%s IS NOT OBSERVED ATOM %s - UPDATING NEW MONITOR WITH IT" % (key, associated_atom))
 									if configuration._state[key] == True:
 										new_monitor.check_optimised(key)
 									elif configuration._state[key] == False:
@@ -802,15 +626,12 @@ if __name__ == "__main__":
 										# the value is None - it wasn't observed in this configuration
 										pass
 								else:
-									#print("%s IS OBSERVED ATOM %s - NOT USING IT" % (key, associated_atom))
 									pass
 
 							# update the monitor with the newly observed data
-							#print("updating new monitor with atom %s and observed valued %s" % (associated_atom, observed_value))
 
 							if not(configuration._state.get(associated_atom_key) is None):
 								sub_verdict = new_monitor.process_atom_and_value(associated_atom, observed_value)
-								#print("%i - KEEPING INSTANTIATED MONITOR" % index)
 
 								# we need to copy the instantiation time of the configuration to the monitor's state
 								new_monitor._state._monitor_instantiation_time = configuration._monitor_instantiation_time
@@ -818,25 +639,12 @@ if __name__ == "__main__":
 								# this configuration has already observed this atom,
 								# so it's from an old monitor and we use it to instantiate a new monitor
 								if sub_verdict == True or sub_verdict == False:
-
 									# set the monitor to None
 									static_qd_to_monitors[static_qd_index][-1] = None
 									del new_monitor
-									#print("TRUE OR FALSE VERDICT REACHED")
-									#add_timing_point("verdict reached - monitor deleted")
-									#add_monitor_size_point(static_qd_index, 0, 0, sub_verdict, "new")
-
 									verdict_report.add_verdict(static_qd_index, sub_verdict)
-
-									#print("*****")
-									#print(static_bindings_to_monitor_states)
-									#print("*****")
-
 								else:
 									pass
-									#print("NO VERDICT REACHED")
-									#add_timing_point("processed observed value '%s' for atom %s" % (observed_value, associated_atom))
-									#add_monitor_size_point(static_qd_index, 0, len(new_monitor.get_unresolved_atoms()), sub_verdict, "new")
 
 							else:
 								# this configuration hasn't observed this atom,
@@ -846,26 +654,16 @@ if __name__ == "__main__":
 								# when we send the observed value to the monitor, we have to force update since monitors' default behaviour
 								# is to reject new observations if a verdict has already been reached
 								new_monitor.process_atom_and_value(associated_atom, observed_value, force_monitor_update=True)
-								#print("%i - UPDATING EXISTING CONFIGURATION WITH MONITOR STATE %s" % (index, new_monitor._state))
 								static_bindings_to_monitor_states[static_qd_index][timestamp]._state = new_monitor._state._state
-								#print("CONFIGURATION IS NOW %s" % static_bindings_to_monitor_states[static_qd_index][index])
-
-					#print("*****")
-					#print(static_bindings_to_monitor_states)
-					#print("*****")
 
 					# update existing monitors
 					monitors = static_qd_to_monitors.get(static_qd_index)
-					#print(monitors)
 					if not(monitors is None or list(set(monitors)) == [None]):
-						#print("Updating existing %i monitors" % len(monitors))
 						for n in range(len(monitors)):
 							# skip monitors that have reached verdicts
 							if monitors[n] is None:
-								#print("Skipping monitor - it's reached a verdict")
 								continue
 
-							#print("updating monitor for static qd index %i" % static_qd_index)
 							sub_verdict = monitors[n].process_atom_and_value(associated_atom, observed_value)
 							if sub_verdict == True or sub_verdict == False:
 
@@ -875,28 +673,13 @@ if __name__ == "__main__":
 
 								if not(static_bindings_to_monitor_states[static_qd_index].get(str(monitors[n]._state._monitor_instantiation_time))):
 									static_bindings_to_monitor_states[static_qd_index][str(monitors[n]._state._monitor_instantiation_time)] = monitors[n]._state
-
-								#pprint(static_bindings_to_monitor_states)
-
 								# set the monitor to None
 								monitors[n] = None
-								#print("TRUE OR FALSE VERDICT REACHED")
-								#add_timing_point("verdict reached - monitor deleted")
-								if check_monitor_size:
-									add_monitor_size_point(static_qd_index, n, 0, sub_verdict, "existing")
 
 								verdict_report.add_verdict(static_qd_index, sub_verdict)
-
-								#print("*****")
-								##print(static_bindings_to_monitor_states)
-								#print("*****")
 							else:
-								#print("NO VERDICT REACHED")
-								#add_timing_point("processed observed value '%s' for atom %s" % (observed_value, associated_atom))
-								if check_monitor_size:
-									add_monitor_size_point(static_qd_index, n, len(monitors[n].get_unresolved_atoms()), sub_verdict, "existing")
+								pass
 					else:
-						#print("All existing monitors are already collapsed")
 						pass
 
 			else:
@@ -924,32 +707,16 @@ if __name__ == "__main__":
 							if not(static_bindings_to_monitor_states[static_qd_index].get(str(monitors[n]._state._monitor_instantiation_time))):
 								static_bindings_to_monitor_states[static_qd_index][str(monitors[n]._state._monitor_instantiation_time)] = monitors[n]._state
 
-							#pprint(static_bindings_to_monitor_states)
-
 							# set the monitor to None
 							monitors[n] = None
-							#print("TRUE OR FALSE VERDICT REACHED")
-							#add_timing_point("verdict reached - monitor deleted")
-							if check_monitor_size:
-								add_monitor_size_point(static_qd_index, n, 0, sub_verdict, "existing")
-
-							#print("*****")
-							#print(static_bindings_to_monitor_states)
-							#print("*****")
 
 							verdict_report.add_verdict(static_qd_index, sub_verdict)
 						else:
-							#print("NO VERDICT REACHED")
-							#add_timing_point("processed observed value '%s' for atom %s" % (observed_value, associated_atom))
 							if check_monitor_size:
 								add_monitor_size_point(static_qd_index, n, len(monitors[n].get_unresolved_atoms()), sub_verdict, "existing")
 
 			# set the task as done
 			queue.task_done()
-
-			#print("CONSUMPTION DONE")
-
-			#print("="*100)
 
 			if args.generate_vis_data:
 				# update the time series
@@ -969,17 +736,13 @@ if __name__ == "__main__":
 	# setup the consumption queue for the monitor to read from
 	queue = Queue.Queue()
 
-	print("="*100)
-	print("SETTING UP AND RUNNING PROGRAM + MONITORING THREAD")
-	print("="*100)
+	print("Running input program with monitoring...")
 
 	# create a new thread for the instrumented program
 	new_code_obj = compile(ast_obj, filename="<ast>", mode="exec")
 	program_thread = threading.Thread(target=program_thread_f, args=[new_code_obj, args])
 
 	consumer_thread = threading.Thread(target=consumer_thread_f)
-
-	#add_timing_point("starting execution")
 
 	# set up the verdict report
 	verdict_report = VerdictReport()
@@ -989,6 +752,8 @@ if __name__ == "__main__":
 
 	program_thread.join()
 	consumer_thread.join()
+
+	print("Monitoring finished")
 
 	# change times for timing points
 	for n in range(len(timing_points)):
@@ -1014,8 +779,6 @@ if __name__ == "__main__":
 	connection.close()
 
 	print("Program finished, and timing/monitor size data inserted into '%s'." % db)
-
-	#pprint(monitor_sizes)
 
 	# output verdict report
 
@@ -1046,7 +809,6 @@ if __name__ == "__main__":
 
 		print("]")
 
-		#print("gave (%i) verdicts %s" % (len(report_map[bind_space_index]), ", ".join(map(str, report_map[bind_space_index]))))
 		true_verdicts = filter(lambda pair : pair[0] == True, report_map[bind_space_index])
 		false_verdicts = filter(lambda pair : pair[0] == False, report_map[bind_space_index])
 		print("gave %i verdicts, %i true and %i false" % (len(report_map[bind_space_index]), len(true_verdicts), len(false_verdicts)))
