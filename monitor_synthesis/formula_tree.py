@@ -384,6 +384,9 @@ class CheckerState(object):
 		for atom in atoms:
 			self._state[atom] = None
 
+		# we use a tuple to record the instantiation time for each encountered bind variable
+		self._monitor_instantiation_time = datetime.datetime.now()
+
 	def set_state(self, symbol):
 		"""
 		Given an atom, set this to true in the state
@@ -409,9 +412,6 @@ class CheckerState(object):
 		# is a double negative.
 		self._state[positive_key] = True
 		self._state[negative_key] = False
-
-		# used to distinguish between monitors generated between iterations in loops
-		self._monitor_instantiation_time = datetime.datetime.now()
 
 	def __repr__(self):
 		return "%s - %s" % (str(self._monitor_instantiation_time), str(self._state))
@@ -508,7 +508,7 @@ class Checker(object):
 					else:
 						self.atom_to_occurrence_map[formula.operands[n]] = [formula]
 				else:
-					print("formula %s has parent %s" % (formula.operands[n], formula.operands[n].parent_formula))
+					#print("formula %s has parent %s" % (formula.operands[n], formula.operands[n].parent_formula))
 					self.construct_atom_formula_occurrence_map(formula.operands[n])
 		elif formula_is_atom(formula):
 			if self.atom_to_occurrence_map.get(formula):
