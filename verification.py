@@ -16,6 +16,7 @@ import sqlite3
 import json
 
 from control_flow_graph.construction import *
+from monitor_synthesis.formula_tree import *
 from verdict_reports import VerdictReport
 
 monitor_time_series = []
@@ -226,7 +227,7 @@ if __name__ == "__main__":
 
 	# a function used in the imported code
 	#def f(a): print("***************f is executing with input %f*******************" % a);time.sleep(a);
-	def g(a): print("g is called!!"); time.sleep(a/10)
+	#def g(a): print("g is called!!"); time.sleep(a/10)
 	def database_operation(db): time.sleep(0.5)
 	def close_connection(db): time.sleep(0.5)
 	def operation(t): time.sleep(t)
@@ -560,10 +561,13 @@ if __name__ == "__main__":
 
 			if branch_minimal:
 
+				print("%s is branch minimal" % str(top_pair))
+
 				# branch minimal, so if the bind variable is the first,
 				# we always instantiate a new monitor, and if not, there are some checks to do
 
 				if bind_variable_index == 0:
+					print("bind variable 0")
 					new_monitor = formula_tree.new_monitor(formula_structure.get_formula_instance())
 					try:
 						static_qd_to_monitors[static_qd_index].append(new_monitor)
@@ -590,6 +594,7 @@ if __name__ == "__main__":
 					else:
 						pass
 				else:
+					print("bind variable > 0")
 
 					if static_bindings_to_monitor_states.get(static_qd_index):
 
@@ -656,33 +661,88 @@ if __name__ == "__main__":
 								new_monitor.process_atom_and_value(associated_atom, observed_value, force_monitor_update=True)
 								static_bindings_to_monitor_states[static_qd_index][timestamp]._state = new_monitor._state._state
 
-					# update existing monitors
+					# update existing monitors or use existing ones to instantiate new monitors
 					monitors = static_qd_to_monitors.get(static_qd_index)
+					print(monitors)
+					# we maintain a list of the timestamps we've handled so we don't instantiate multiple
+					# new monitors based no existing monitors created at the same time
+					timestamps_handled = []
 					if not(monitors is None or list(set(monitors)) == [None]):
 						for n in range(len(monitors)):
 							# skip monitors that have reached verdicts
 							if monitors[n] is None:
 								continue
 
-							sub_verdict = monitors[n].process_atom_and_value(associated_atom, observed_value)
-							if sub_verdict == True or sub_verdict == False:
+							# a trick to handle objects being used as keys in dictionaries
+							associated_atom_index = monitors[n]._state._state.keys().index(associated_atom)
+							associated_atom_key = monitors[n]._state._state.keys()[associated_atom_index]
 
-								# record the monitor state with the binding
-								if static_bindings_to_monitor_states.get(static_qd_index) is None:
-									static_bindings_to_monitor_states[static_qd_index] = {}
+							# if this monitor hasn't observed this instrument yet, then simply update it
+							if not(monitors[n]._state._state.get(associated_atom_key)):
+								sub_verdict = monitors[n].process_atom_and_value(associated_atom, observed_value)
+								if sub_verdict == True or sub_verdict == False:
 
-								if not(static_bindings_to_monitor_states[static_qd_index].get(str(monitors[n]._state._monitor_instantiation_time))):
-									static_bindings_to_monitor_states[static_qd_index][str(monitors[n]._state._monitor_instantiation_time)] = monitors[n]._state
-								# set the monitor to None
-								monitors[n] = None
+									# record the monitor state with the binding
+									if static_bindings_to_monitor_states.get(static_qd_index) is None:
+										static_bindings_to_monitor_states[static_qd_index] = {}
 
-								verdict_report.add_verdict(static_qd_index, sub_verdict)
-							else:
-								pass
+									if not(static_bindings_to_monitor_states[static_qd_index].get(str(monitors[n]._state._monitor_instantiation_time))):
+										static_bindings_to_monitor_states[static_qd_index][str(monitors[n]._state._monitor_instantiation_time)] = monitors[n]._state
+									# set the monitor to None
+									monitors[n] = None
+
+									verdict_report.add_verdict(static_qd_index, sub_verdict)
+								else:
+									pass
+							elif not(monitors[n]._state._monitor_instantiation_time in timestamps_handled):
+								print("This monitor has already observed this point - instantiating a new monitor")
+								# this monitor has observed this atom - since this observation is branch minimal,
+								# we copy the state (at some point, only up to the current bind variable)
+								# and then update the new monitor with the new observation
+								new_monitor = formula_tree.new_monitor(formula_structure.get_formula_instance())
+
+								try:
+									static_qd_to_monitors[static_qd_index].append(new_monitor)
+								except:
+									static_qd_to_monitors[static_qd_index] = [new_monitor]
+
+								for key in monitors[n]._state._state.keys():
+									if not(key == associated_atom) and not(key == formula_tree.lnot(associated_atom)):
+										if monitors[n]._state._state[key] == True:
+											new_monitor.check_optimised(key)
+										elif monitors[n]._state._state[key] == False:
+											new_monitor.check_optimised(formula_tree.lnot(key))
+										else:
+											# the value is None - it wasn't observed in this configuration
+											pass
+									else:
+										pass
+
+								# update the monitor with the newly observed data
+								sub_verdict = new_monitor.process_atom_and_value(associated_atom, observed_value)
+
+								# we need to copy the instantiation time of the configuration to the monitor's state
+								new_monitor._state._monitor_instantiation_time = monitors[n]._state._monitor_instantiation_time
+
+								# this configuration has already observed this atom,
+								# so it's from an old monitor and we use it to instantiate a new monitor
+								if sub_verdict == True or sub_verdict == False:
+									# set the monitor to None
+									static_qd_to_monitors[static_qd_index][-1] = None
+									del new_monitor
+									verdict_report.add_verdict(static_qd_index, sub_verdict)
+								else:
+									pass
+
+								print("Monitors for qd index %i are now %s" % (static_qd_index, str(static_qd_to_monitors[static_qd_index])))
+								timestamps_handled.append(monitors[n]._state._monitor_instantiation_time)
 					else:
 						pass
 
 			else:
+
+				print("%s is not branch minimal" % str(top_pair))
+
 				# this point can't trigger instantiation of a monitor for this element of the static qd
 				# get all the monitors that are not None
 				monitors = static_qd_to_monitors.get(static_qd_index)
@@ -740,6 +800,11 @@ if __name__ == "__main__":
 
 	# create a new thread for the instrumented program
 	new_code_obj = compile(ast_obj, filename="<ast>", mode="exec")
+
+	"""import dis
+	dis.dis(new_code_obj)
+	exit()"""
+
 	program_thread = threading.Thread(target=program_thread_f, args=[new_code_obj, args])
 
 	consumer_thread = threading.Thread(target=consumer_thread_f)
