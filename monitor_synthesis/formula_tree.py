@@ -385,7 +385,7 @@ class CheckerState(object):
 			self._state[atom] = None
 
 		# we use a tuple to record the instantiation time for each encountered bind variable
-		self._monitor_instantiation_time = datetime.datetime.now()
+		self._monitor_instantiation_time = (datetime.datetime.now(),)
 
 	def set_state(self, symbol):
 		"""
