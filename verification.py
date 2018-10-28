@@ -639,11 +639,17 @@ if __name__ == "__main__":
 								sub_verdict = new_monitor.process_atom_and_value(associated_atom, observed_value)
 
 								# we need to copy the instantiation time of the configuration to the monitor's state
-								new_monitor._state._monitor_instantiation_time = configuration._monitor_instantiation_time
+								new_monitor._state._monitor_instantiation_time = list(configuration._monitor_instantiation_time)
+								try:
+									new_monitor._state._monitor_instantiation_time[bind_variable_index] = datetime.datetime.now()
+								except:
+									new_monitor._state._monitor_instantiation_time += (datetime.datetime.now(),)
+								new_monitor._state._monitor_instantiation_time = tuple(new_monitor._state._monitor_instantiation_time)
 
 								# this configuration has already observed this atom,
 								# so it's from an old monitor and we use it to instantiate a new monitor
 								if sub_verdict == True or sub_verdict == False:
+									print(new_monitor._state._monitor_instantiation_time)
 									# set the monitor to None
 									static_qd_to_monitors[static_qd_index][-1] = None
 									del new_monitor
@@ -666,6 +672,8 @@ if __name__ == "__main__":
 					print(monitors)
 					# we maintain a list of the timestamps we've handled so we don't instantiate multiple
 					# new monitors based no existing monitors created at the same time
+					# this is not the most efficient way - we could build a tree whose paths are sequences of timestamps
+					# with monitors as leaves.
 					timestamps_handled = []
 					if not(monitors is None or list(set(monitors)) == [None]):
 						for n in range(len(monitors)):
@@ -681,6 +689,9 @@ if __name__ == "__main__":
 							if not(monitors[n]._state._state.get(associated_atom_key)):
 								sub_verdict = monitors[n].process_atom_and_value(associated_atom, observed_value)
 								if sub_verdict == True or sub_verdict == False:
+									# TODO - update timestamp sequence when we observe a new value, since at the moment,
+									# we can have collapsed monitors with partial timestamp sequences
+									print(monitors[n]._state._monitor_instantiation_time)
 
 									# record the monitor state with the binding
 									if static_bindings_to_monitor_states.get(static_qd_index) is None:
@@ -722,11 +733,17 @@ if __name__ == "__main__":
 								sub_verdict = new_monitor.process_atom_and_value(associated_atom, observed_value)
 
 								# we need to copy the instantiation time of the configuration to the monitor's state
-								new_monitor._state._monitor_instantiation_time = monitors[n]._state._monitor_instantiation_time
+								new_monitor._state._monitor_instantiation_time = list(monitors[n]._state._monitor_instantiation_time)
+								try:
+									new_monitor._state._monitor_instantiation_time[bind_variable_index] = datetime.datetime.now()
+								except:
+									new_monitor._state._monitor_instantiation_time += (datetime.datetime.now(),)
+								new_monitor._state._monitor_instantiation_time = tuple(new_monitor._state._monitor_instantiation_time)
 
 								# this configuration has already observed this atom,
 								# so it's from an old monitor and we use it to instantiate a new monitor
 								if sub_verdict == True or sub_verdict == False:
+									print(new_monitor._state._monitor_instantiation_time)
 									# set the monitor to None
 									static_qd_to_monitors[static_qd_index][-1] = None
 									del new_monitor
