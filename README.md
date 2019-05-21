@@ -8,6 +8,8 @@ In applying this licence, CERN does not waive the privileges and immunities gran
 
 Author: Joshua Dawes - CERN, University of Manchester
 
+**VyPR is beginning a period of extensive development, which will include writing much more thorough (and up to date) documentation.  To use VyPR, follow the instructions at http://cern.ch/vypr/use-vypr.html.**
+
 ## Setup
 
 To use VyPR, setup a virtual environment for Python in the directory in which you will run the tool.
